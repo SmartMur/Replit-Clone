@@ -13,6 +13,7 @@ import { buildPreviewErrorHtml } from '@/lib/preview/preview-error-html';
 import {
   getMimeType,
   injectPreviewBaseHref,
+  isPathInside,
   stripPreviewBaseHref,
 } from '@/lib/project-files';
 
@@ -109,7 +110,7 @@ export async function serveArtifactFile(
   const workspaceRoot = artifactWorkspaceDir(projectId, artifactSlug);
   const absolute = path.resolve(workspaceRoot, relativePath);
 
-  if (!absolute.startsWith(path.resolve(workspaceRoot))) {
+  if (!isPathInside(workspaceRoot, absolute)) {
     throw new Error('Invalid path.');
   }
 

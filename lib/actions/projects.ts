@@ -27,6 +27,7 @@ import {
   savePromptAttachmentsToArtifact,
 } from '../project-attachments';
 import { getAccessibleProject } from '../projects/access';
+import { projectWorkspaceDir } from '../project-files';
 
 const projectIdSchema = z.object({
   projectId: z.string().min(1),
@@ -46,7 +47,7 @@ function revalidateProjectPaths() {
 
 async function removeProjectFilesFromDisk(projectId: string) {
   const dirs = [
-    path.join(process.cwd(), 'public', 'project-workspace', projectId),
+    projectWorkspaceDir(projectId),
     path.join(process.cwd(), 'public', 'uploads', 'projects', projectId),
   ];
 

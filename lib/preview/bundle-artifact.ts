@@ -12,6 +12,8 @@ import {
 } from '@/lib/preview/detect-preview-mode';
 import { ensureReactEntryFiles } from '@/lib/preview/ensure-react-entry';
 import { artifactWorkspaceDir } from '@/lib/preview/list-workspace-paths';
+import { isPathInside } from '@/lib/project-files';
+import type { Plugin } from 'esbuild';
 
 type BundleCacheEntry = {
   bundleJs: string;
@@ -31,6 +33,46 @@ const REACT_ESM_IMPORT_MAP = {
     'lucide-react': 'https://esm.sh/lucide-react?dev',
   },
 };
+
+/**
+ * Keeps esbuild inside the artifact folder. Without this, `import '../../../x.json'`
+ * or a bare package import can pull arbitrary host files into the served bundle.
+ * Only the CDN-mapped packages (REACT_ESM_IMPORT_MAP) may stay external.
+ */
+function confineToWorkspacePlugin(root: string, externals: string[]): Plugin {
+  const allowedExternal = new Set(externals);
+  return {
+    name: 'confine-to-workspace',
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, async (args) => {
+        if (args.pluginData?.confined) return undefined;
+        if (allowedExternal.has(args.path)) {
+          return { path: args.path, external: true };
+        }
+        if (args.kind === 'entry-point') return undefined;
+
+        const resolved = await build.resolve(args.path, {
+          kind: args.kind,
+          importer: args.importer,
+          namespace: args.namespace,
+          resolveDir: args.resolveDir,
+          pluginData: { confined: true },
+        });
+        if (resolved.errors.length > 0) return resolved;
+        if (!isPathInside(root, resolved.path)) {
+          return {
+            errors: [
+              {
+                text: `Import "${args.path}" resolves outside the project folder and is not allowed.`,
+              },
+            ],
+          };
+        }
+        return resolved;
+      });
+    },
+  };
+}
 
 function cacheKey(projectId: string, artifactSlug: string) {
   return `${projectId}:${artifactSlug}`;
@@ -106,7 +148,13 @@ export async function bundleArtifact({
     jsx: isReact ? 'automatic' : 'preserve',
     external: isReact ? Object.keys(REACT_ESM_IMPORT_MAP.imports) : [],
     absWorkingDir: absoluteDir,
-    plugins: [cssInjectPlugin()],
+    plugins: [
+      confineToWorkspacePlugin(
+        absoluteDir,
+        isReact ? Object.keys(REACT_ESM_IMPORT_MAP.imports) : [],
+      ),
+      cssInjectPlugin(),
+    ],
     loader: {
       '.jsx': 'jsx',
       '.tsx': 'tsx',

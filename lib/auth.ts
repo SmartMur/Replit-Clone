@@ -6,6 +6,12 @@ import { provisionNewUser } from './auth/provision-user';
 
 const useDatabase = Boolean(process.env.DATABASE_URL);
 
+// Local development only: lets you sign in without Google/GitHub OAuth apps.
+// Hard-disabled in production builds regardless of the env flag.
+const devEmailAuth =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.ENABLE_DEV_EMAIL_AUTH === '1';
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
@@ -15,6 +21,9 @@ export const auth = betterAuth({
           provider: 'postgresql',
         }),
       }
+    : {}),
+  ...(devEmailAuth
+    ? { emailAndPassword: { enabled: true, minPasswordLength: 12 } }
     : {}),
   socialProviders: {
     google: {
