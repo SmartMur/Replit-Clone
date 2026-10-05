@@ -1,0 +1,11 @@
+{
+  "id": "admin-table",
+  "name": "Admin list with search",
+  "description": "App shell with page header and action, search box with live filtering, divided list rows with badges, empty state and pagination controls.",
+  "bestFor": "user lists, orders, content management, any records list",
+  "files": [
+    "index.html",
+    "script.js",
+    "icon.svg"
+  ]
+}

@@ -45,3 +45,9 @@ Third-party instruction content (vendor/bm-skills, pinned d42872f, 64 files, sha
 - Tailwind v4 browser runtime is served from our own origin (`@tailwindcss/browser@4.3.3`, MIT), not a CDN.
 - Generated sites load Inter and DM Sans from Google Fonts (the design system default). This is an external request from every generated site; switch to self-hosted fonts if that matters.
 - Licence: upstream has no LICENSE file (README says free to use, fork, adapt). Confirm before publishing this repo publicly with the vendored copy.
+
+## Templates and accessibility overlay (feat/templates)
+- `use_template` only reads `templates/<id>/` where id matches `^[a-z0-9-]+$` and is listed by a valid template.json; file names must be plain names. Seven bad ids tested (traversal, absolute, case, empty).
+- Measured finding: upstream bm-design-system light-mode accent pairs fail WCAG AA (btn-primary 2.36:1, text-accent 2.36:1, accent-display text 3.36:1, btn-danger 3.74:1, signal 2.09:1). An overlay appended to the seeded copy adds accent-strong/danger-strong tokens (5.49:1 on white), underlines in-text links and fixes the pressed toggle. The vendored file is unchanged.
+- The Tailwind browser runtime makes a stray request for `tailwindcss` virtual paths; the preview server answers those with an empty stylesheet.
+- Agent edits can still introduce defects (a malformed `<dl>` scored 96). A server-side accessibility check at complete_build would catch this class; not built.

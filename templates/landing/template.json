@@ -1,0 +1,1 @@
+{ "id": "landing", "name": "Marketing landing page", "description": "Single page: sticky header, hero, 3 outcomes, 3 steps, FAQ (details/summary), closing call-to-action, footer. One primary call-to-action repeated.", "bestFor": "products, services, consultancies, events, portfolios", "files": ["index.html", "icon.svg"] }

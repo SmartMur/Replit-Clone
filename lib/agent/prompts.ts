@@ -41,8 +41,26 @@ const READ_SKILL_TOOL = {
     },
   } satisfies Anthropic.Tool;
 
+const USE_TEMPLATE_TOOL = {
+  name: 'use_template',
+  description:
+    'List the starter templates (call with no arguments), or start this artifact from one by passing its id. Seeds the template files into an empty artifact. Every {{placeholder}} must be replaced before complete_build.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      template: {
+        type: 'string',
+        description:
+          'Template id, e.g. landing, app-dashboard, auth, settings, admin-table. Omit to list.',
+      },
+    },
+    required: [] as string[],
+  },
+} satisfies Anthropic.Tool;
+
 const READ_ONLY_TOOLS = [
   READ_SKILL_TOOL,
+  USE_TEMPLATE_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',
@@ -232,6 +250,7 @@ export function detectProjectStackFromPaths(
 
 export const AGENT_TOOLS = [
   READ_SKILL_TOOL,
+  USE_TEMPLATE_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',

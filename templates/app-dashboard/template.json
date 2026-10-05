@@ -1,0 +1,11 @@
+{
+  "id": "app-dashboard",
+  "name": "App dashboard",
+  "description": "App shell (sticky sidebar, mobile menu, theme toggle) with page header, 4 metric cards, recent-activity list with badges and a callout.",
+  "bestFor": "internal tools, SaaS home screens, admin overviews",
+  "files": [
+    "index.html",
+    "script.js",
+    "icon.svg"
+  ]
+}
