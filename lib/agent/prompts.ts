@@ -1,6 +1,7 @@
 import type { ArtifactType } from '@/lib/generated/prisma/client';
 import type Anthropic from '@anthropic-ai/sdk';
 
+import { DESIGN_SYSTEM_BLOCK } from '@/lib/agent/skills-adapter';
 import {
   detectProjectStack,
   type ProjectStack,
@@ -20,7 +21,28 @@ export const PLAN_MODE_BLOCK = [
   '7. If the request is already clear, skip questions and go straight to complete_plan.',
 ].join('\n');
 
+const READ_SKILL_TOOL = {
+    name: 'read_skill',
+    description:
+      'Read a file from the vendored bm-skills design engine. Call with only skill to list its files; add path (e.g. SKILL.md or references/styles/design-system.css) to read one. Read-only.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        skill: {
+          type: 'string',
+          description: 'bm-design-system, bm-prd-creator or bm-favicon-creator',
+        },
+        path: {
+          type: 'string',
+          description: 'File path inside the skill, e.g. SKILL.md',
+        },
+      },
+      required: ['skill'],
+    },
+  } satisfies Anthropic.Tool;
+
 const READ_ONLY_TOOLS = [
+  READ_SKILL_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',
@@ -183,6 +205,7 @@ export function buildAgentSystemPrompt({
     `The complete_build summary MUST use markdown: a short intro paragraph, then **Design:** and **Functionality:** sections with bullet lists.`,
     buildGuidance,
     planMode ? PLAN_MODE_BLOCK : null,
+    artifactType === 'WEB_APP' ? DESIGN_SYSTEM_BLOCK : null,
     attachmentContext
       ? [
           'Prompt attachments from the user:',
@@ -208,6 +231,7 @@ export function detectProjectStackFromPaths(
 }
 
 export const AGENT_TOOLS = [
+  READ_SKILL_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',

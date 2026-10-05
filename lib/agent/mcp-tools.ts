@@ -9,6 +9,7 @@ export const BUILDER_TOOL_PREFIX = `mcp__${BUILDER_SERVER_NAME}__`;
 /** Zod shapes mirroring the JSON schemas in prompts.ts (same names, same fields). */
 const SHAPES: Record<string, z.ZodRawShape> = {
   list_files: {},
+  read_skill: { skill: z.string(), path: z.string().optional() },
   read_file: { path: z.string().describe('Relative file path, e.g. index.html') },
   edit_file: {
     path: z.string(),
