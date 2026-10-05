@@ -58,6 +58,23 @@ const USE_TEMPLATE_TOOL = {
   },
 } satisfies Anthropic.Tool;
 
+const CHECK_PREVIEW_TOOL = {
+  name: 'check_preview',
+  description:
+    'Render the site in a real headless browser and return measured findings plus screenshots (desktop, phone, dark mode). It detects invisible text, sideways scrolling, broken or blocked images, console errors and accessibility problems. Call it after your edits, LOOK at every screenshot, fix the errors, and call it again. complete_build is blocked until the latest version has been checked.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      look_at: {
+        type: 'string',
+        description:
+          'Optional. A CSS selector or a piece of visible text (e.g. the heading or line you just changed). The result then includes crops around it in desktop, phone and dark mode, so you can see exactly what you edited.',
+      },
+    },
+    required: [] as string[],
+  },
+} satisfies Anthropic.Tool;
+
 const READ_ONLY_TOOLS = [
   READ_SKILL_TOOL,
   USE_TEMPLATE_TOOL,
@@ -251,6 +268,7 @@ export function detectProjectStackFromPaths(
 export const AGENT_TOOLS = [
   READ_SKILL_TOOL,
   USE_TEMPLATE_TOOL,
+  CHECK_PREVIEW_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',
