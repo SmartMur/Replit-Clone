@@ -55,6 +55,8 @@ import {
 import { formatBundleError } from '@/lib/preview/format-bundle-error';
 import { artifactWorkspaceDir } from '@/lib/project-files';
 import { mkdir } from 'node:fs/promises';
+import { readSkill } from '@/lib/agent/skills';
+import { DESIGN_SYSTEM_CSS, renderDesignSystemCss } from '@/lib/agent/skills-adapter';
 import {
   listProjectFiles,
   readProjectFile,
@@ -124,7 +126,9 @@ type ToolContext = {
   artifactId: string;
   artifactSlug: string;
   artifactName: string;
+  artifactType: string;
   planMode: boolean;
+  skillsRead: Set<string>;
   existingPaths: Set<string>;
   readPaths: Set<string>;
   writtenPaths: Set<string>;
@@ -245,6 +249,29 @@ function normalizePlanOptions(raw: unknown): string[] {
     .slice(0, 4);
 }
 
+/**
+ * Deterministic enforcement of the design engine: a site seeded with design-system.css
+ * must have read the skill and must actually use the stylesheet.
+ */
+async function checkDesignSystemGate(ctx: ToolContext) {
+  const css = await readProjectFile(ctx.projectId, ctx.artifactSlug, DESIGN_SYSTEM_CSS);
+  if (css === null) return null;
+
+  const readSkillMd = [...ctx.skillsRead].some((entry) =>
+    entry.startsWith('bm-design-system/SKILL.md'),
+  );
+  if (!readSkillMd) {
+    return 'This site uses the bm-design-system engine. Call read_skill with skill "bm-design-system" and path "SKILL.md" (and references/agent-instructions.md), then restyle using its tokens and component classes before completing.';
+  }
+
+  const html = await readProjectFile(ctx.projectId, ctx.artifactSlug, 'index.html');
+  if (html === null) return null;
+  if (!/<link\b[^>]*href=["']design-system\.css["']/i.test(html)) {
+    return `index.html must include <link rel="stylesheet" href="${DESIGN_SYSTEM_CSS}"> in <head> (the server turns it into the Tailwind runtime). Add it, use the design-system tokens and classes, and remove duplicate hand-rolled styling.`;
+  }
+  return null;
+}
+
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
@@ -299,6 +326,18 @@ async function executeTool(
           .map((file) => file.path.replace(`${ctx.artifactSlug}/`, ''))
           .join('\n'),
       };
+    }
+
+    case 'read_skill': {
+      const skill = String(input.skill ?? '').trim();
+      const skillPath = String(input.path ?? '').trim();
+      ctx.skillsRead.add(`${skill}/${skillPath}`);
+      emitAction(
+        ctx,
+        'Read design skill',
+        skillPath ? `${skill}/${skillPath}` : skill,
+      );
+      return { result: await readSkill(skill, skillPath || undefined) };
     }
 
     case 'read_file': {
@@ -488,6 +527,12 @@ async function executeTool(
         };
       }
 
+      const designGate = await checkDesignSystemGate(ctx);
+      if (designGate) {
+        ctx.buildValid = false;
+        return { result: `${BUILD_NOT_READY_PREFIX} ${designGate}` };
+      }
+
       const summary = String(input.summary ?? '').trim();
       emitAction(ctx, 'Validating preview');
 
@@ -589,6 +634,27 @@ type SessionOutcome = {
   hitTurnLimit: boolean;
 };
 
+/** New static website artifacts start with the bm-design-system stylesheet so the agent builds on tokens. */
+async function seedDesignSystem(ctx: ToolContext) {
+  if (ctx.planMode || ctx.artifactType !== 'WEB_APP') return;
+  const files = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
+  const prefix = `${ctx.artifactSlug}/`;
+  const buildable = files.filter(
+    (file) => !file.path.startsWith(`${prefix}${PROMPT_ATTACHMENTS_DIR}/`),
+  );
+  if (buildable.length > 0) return;
+
+  await writeProjectFile({
+    projectId: ctx.projectId,
+    artifactSlug: ctx.artifactSlug,
+    artifactId: ctx.artifactId,
+    relativePath: DESIGN_SYSTEM_CSS,
+    content: await renderDesignSystemCss(),
+  });
+  ctx.existingPaths.add(DESIGN_SYSTEM_CSS);
+  ctx.onEvent?.({ type: 'action', label: 'Applied design system', path: DESIGN_SYSTEM_CSS, status: 'done' });
+}
+
 async function runSession({
   ctx,
   systemPrompt,
@@ -604,6 +670,7 @@ async function runSession({
 }): Promise<SessionOutcome & { summary: string }> {
   const workspaceDir = artifactWorkspaceDir(ctx.projectId, ctx.artifactSlug);
   await mkdir(workspaceDir, { recursive: true });
+  await seedDesignSystem(ctx);
 
   let summary = '';
   let done = false;
@@ -861,7 +928,9 @@ export async function runAgentLoop({
     artifactId,
     artifactSlug: artifact.slug,
     artifactName: artifact.name,
+    artifactType: artifact.type,
     planMode,
+    skillsRead: new Set(),
     existingPaths: new Set(relativePaths),
     readPaths: new Set(),
     writtenPaths: new Set(),

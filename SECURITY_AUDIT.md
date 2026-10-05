@@ -37,3 +37,11 @@ The agent now uses the Claude Agent SDK on the owner's subscription login. Verif
 family (`mcp__builder__*`), no slash commands, child env contains only PATH/HOME/LANG-type vars, a second concurrent run
 on a project returns 409, and a full plan-then-build flow produces files, database rows and a working preview.
 Residual: prompt injection in attachments can still make the agent write arbitrary files inside the artifact folder (see R1).
+
+## bm-skills design engine (feat/bm-skills)
+Third-party instruction content (vendor/bm-skills, pinned d42872f, 64 files, sha256 manifest, `node scripts/verify-bm-skills.mjs`).
+- Exposure: the text becomes agent instructions. The agent has file tools only and the skill reader is read-only, restricted to .md/.css/.html/.txt inside three skill folders (traversal, absolute paths, .tsx and unvendored skills refused; unit-tested).
+- Not vendored: `.agents/setup` and `.agents/resume` (sudo, curl|sh, Postgres config changes), the plugin manifests, bm-skill-builder.
+- Tailwind v4 browser runtime is served from our own origin (`@tailwindcss/browser@4.3.3`, MIT), not a CDN.
+- Generated sites load Inter and DM Sans from Google Fonts (the design system default). This is an external request from every generated site; switch to self-hosted fonts if that matters.
+- Licence: upstream has no LICENSE file (README says free to use, fork, adapt). Confirm before publishing this repo publicly with the vendored copy.
