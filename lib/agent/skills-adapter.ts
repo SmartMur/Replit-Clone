@@ -30,7 +30,7 @@ export const ACCESSIBILITY_OVERLAY = `
   a { color: var(--color-accent-strong); }
   a:hover { color: color-mix(in oklab, var(--color-accent-strong), black 15%); }
   /* Links inside running text must not rely on colour alone (WCAG 1.4.1). */
-  p a, li a, dd a, td a { text-decoration: underline; text-underline-offset: 2px; }
+  p a, li a, dd a, td a, label a { text-decoration: underline; text-underline-offset: 2px; }
 }
 @layer components {
   .btn-primary { @apply bg-accent-strong text-page hover:bg-accent-strong/90; }
@@ -41,8 +41,8 @@ export const ACCESSIBILITY_OVERLAY = `
   .badge-signal { @apply text-ink-display; }
   /* Invented/sample content (data-sample): highlighted so the owner replaces it before launch. */
   [data-sample] {
-    background: color-mix(in oklab, var(--color-signal) 28%, transparent);
-    outline: 1px dashed color-mix(in oklab, var(--color-signal-display) 60%, transparent);
+    background: color-mix(in oklab, var(--color-signal) 14%, transparent);
+    outline: 1.5px dashed color-mix(in oklab, var(--color-signal-display) 70%, transparent);
     outline-offset: 2px;
     border-radius: 2px;
   }

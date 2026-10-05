@@ -1,0 +1,7 @@
+{
+  "style": "Photorealistic candid editorial documentary photograph, natural window light, bright airy white and pale-blue palette with soft teal accents, shallow depth of field, calm and uncluttered composition, dignified and respectful portrayal of care, warm genuine expressions, realistic anatomy and hands, no text, no logos, no watermarks, landscape 3:2.",
+  "images": [
+    { "slot": "story1", "alt": "An older woman and a young companion laughing together over tea and baking in a bright kitchen", "prompt": "An elderly Latina grandmother with short silver hair and a lilac cardigan sitting at a bright farmhouse kitchen table with a young East Asian man in his twenties wearing a soft teal polo, sharing tea and fresh-baked cookies and laughing together, a family recipe book open between them, sunny window behind." },
+    { "slot": "story2", "alt": "An older man with a cane walking confidently along a river-valley path in autumn beside a young companion", "prompt": "A retired elderly man in his seventies with white hair, a navy jacket and a walking cane, walking confidently along a sunny river-valley path in autumn beside a young Black woman in her twenties wearing a teal jacket, both smiling, golden leaves, the river and a bridge softly blurred behind them." }
+  ]
+}

@@ -5,7 +5,7 @@
 // Each image is generated in its own throwaway directory with the workspace-write sandbox, validated
 // (PNG magic bytes + dimensions), then compressed to JPEG with sharp. Prompts come only from the spec.
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';

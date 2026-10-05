@@ -15,6 +15,10 @@ Evidence: 12 agent turns across three EstherCare builds (owner feedback verbatim
 2. Reference capture (agent sees URLs the owner pastes): YES, limited to URLs in the owner's own messages. Not built yet.
 3. Strictness: the assistant decides. Chosen: errors block (compile failure, missing/remote assets, unmarked invented content, more than 8 inline styles, more than 5 unknown classes); warnings block once so the agent must acknowledge them.
 
+## Done after session 1
+- Production export, launch gate, EstherCare polish pass (see docs/launch/esthercare.md).
+- Lesson: automated scores (Lighthouse 100) missed two invisible-text bugs. A screenshot-based visual check belongs in the agent loop (session 2).
+
 ## Next
 - Session 2: headless-Chrome render check with screenshots fed back to the agent; snapshots before template/design-system swaps and `apply_template`; image upload panel.
 - Session 3: `capture_reference(url)` with SSRF defences (https/443 only, resolve and refuse private ranges, pin IP, re-check redirects and subresources, size/time caps, untrusted-content wrapping).
