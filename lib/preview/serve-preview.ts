@@ -9,6 +9,7 @@ import {
 import { resolveProjectStack } from '@/lib/preview/detect-preview-mode';
 import { formatBundleError } from '@/lib/preview/format-bundle-error';
 import { artifactWorkspaceDir } from '@/lib/preview/list-workspace-paths';
+import { composeDesignCss } from '@/lib/preview/design-css';
 import { buildPreviewErrorHtml } from '@/lib/preview/preview-error-html';
 import {
   getMimeType,
@@ -48,20 +49,20 @@ async function applyDesignSystem(
   inlineRuntime: boolean,
 ) {
   if (!DESIGN_SYSTEM_LINK.test(html)) return html;
-  let css: string;
-  try {
-    css = await readFile(path.join(workspaceRoot, 'design-system.css'), 'utf8');
-  } catch {
-    return html;
-  }
+  const composed = await composeDesignCss(workspaceRoot);
+  if (composed.css === null) return html;
+
   const runtime = inlineRuntime
     ? `<script>${(await readTailwindRuntime()).replace(/<\/script/gi, '<\\/script')}</script>`
     : `<script src="${TAILWIND_RUNTIME_PATH}"></script>`;
   // The browser runtime defines no utilities unless the stylesheet imports Tailwind itself.
-  const source = /@import\s+["']tailwindcss/.test(css)
-    ? css
-    : `@import "tailwindcss";\n${css}`;
-  const style = `<style type="text/tailwindcss">\n${source.replace(/<\/style/gi, '<\\/style')}\n</style>`;
+  const source = /@import\s+["']tailwindcss/.test(composed.css)
+    ? composed.css
+    : `@import "tailwindcss";\n${composed.css}`;
+  const note = composed.siteError
+    ? `<!-- site.css ignored: ${composed.siteError.replace(/--+/g, '-').replace(/\n/g, ' ')} -->\n`
+    : '';
+  const style = `${note}<style type="text/tailwindcss">\n${source.replace(/<\/style/gi, '<\\/style')}\n</style>`;
   return html.replace(DESIGN_SYSTEM_LINK, () => `${runtime}\n${style}`);
 }
 

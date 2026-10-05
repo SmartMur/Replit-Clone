@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ['esbuild'],
+  serverExternalPackages: ['esbuild', '@tailwindcss/node', 'tailwindcss', '@tailwindcss/oxide', 'lightningcss'],
   allowedDevOrigins: ['192.168.45.61'],
   images: {
     remotePatterns: [

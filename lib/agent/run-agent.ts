@@ -62,7 +62,10 @@ import {
   listTemplates,
   readTemplate,
 } from '@/lib/agent/templates';
-import { DESIGN_SYSTEM_CSS, renderDesignSystemCss } from '@/lib/agent/skills-adapter';
+import { createHash } from 'node:crypto';
+import { auditSite } from '@/lib/agent/site-audit';
+import { DESIGN_SYSTEM_CSS, SITE_CSS_STUB } from '@/lib/agent/skills-adapter';
+import { SITE_CSS } from '@/lib/preview/design-css';
 import {
   listProjectFiles,
   readProjectFile,
@@ -135,6 +138,7 @@ type ToolContext = {
   artifactType: string;
   planMode: boolean;
   skillsRead: Set<string>;
+  auditAck: string | null;
   existingPaths: Set<string>;
   readPaths: Set<string>;
   writtenPaths: Set<string>;
@@ -260,8 +264,10 @@ function normalizePlanOptions(raw: unknown): string[] {
  * must have read the skill and must actually use the stylesheet.
  */
 async function checkDesignSystemGate(ctx: ToolContext) {
-  const css = await readProjectFile(ctx.projectId, ctx.artifactSlug, DESIGN_SYSTEM_CSS);
-  if (css === null) return null;
+  const files = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
+  const prefix = `${ctx.artifactSlug}/`;
+  const names = files.map((file) => file.path.slice(prefix.length));
+  if (!names.includes(DESIGN_SYSTEM_CSS) && !names.includes(SITE_CSS)) return null;
 
   const readSkillMd = [...ctx.skillsRead].some((entry) =>
     entry.startsWith('bm-design-system/SKILL.md'),
@@ -270,25 +276,41 @@ async function checkDesignSystemGate(ctx: ToolContext) {
     return 'This site uses the bm-design-system engine. Call read_skill with skill "bm-design-system" and path "SKILL.md" (and references/agent-instructions.md), then restyle using its tokens and component classes before completing.';
   }
 
-  const files = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
-  const prefix = `${ctx.artifactSlug}/`;
-  for (const file of files) {
-    const name = file.path.slice(prefix.length);
-    if (!/\.(html|js)$/i.test(name) || name.startsWith(`${PROMPT_ATTACHMENTS_DIR}/`)) continue;
+  const texts: Record<string, string> = {};
+  for (const name of names) {
+    if (!/\.(html?|css|js)$/i.test(name) || name.startsWith(`${PROMPT_ATTACHMENTS_DIR}/`)) continue;
     const text = await readProjectFile(ctx.projectId, ctx.artifactSlug, name);
-    if (/\.html$/i.test(name) && text && /<table\b/i.test(text) && !/overflow-x-auto/.test(text)) {
+    if (text === null) continue;
+    texts[name] = text;
+    if (/\.html$/i.test(name) && /<table\b/i.test(text) && !/overflow-x-auto/.test(text)) {
       return `${name} has a <table> that is not inside a scroll container, which overflows phones. Wrap every table in <div class="overflow-x-auto"> (keep the page itself from scrolling sideways at 375px), then call complete_build again.`;
     }
-    if (text && PLACEHOLDER.test(text)) {
+    if (/\.(html|js)$/i.test(name) && PLACEHOLDER.test(text)) {
       const sample = text.match(PLACEHOLDER)?.[0];
       return `${name} still contains template placeholders such as ${sample}. Replace every {{placeholder}} with real content (or remove the element) in every file, then call complete_build again.`;
     }
   }
 
-  const html = await readProjectFile(ctx.projectId, ctx.artifactSlug, 'index.html');
-  if (html === null) return null;
+  const html = texts['index.html'];
+  if (html === undefined) return null;
   if (!/<link\b[^>]*href=["']design-system\.css["']/i.test(html)) {
     return `index.html must include <link rel="stylesheet" href="${DESIGN_SYSTEM_CSS}"> in <head> (the server turns it into the Tailwind runtime). Add it, use the design-system tokens and classes, and remove duplicate hand-rolled styling.`;
+  }
+
+  const audit = await auditSite({
+    workspaceRoot: artifactWorkspaceDir(ctx.projectId, ctx.artifactSlug),
+    fileNames: names,
+    texts,
+  });
+  if (audit.errors.length > 0) {
+    return `The automated site audit found problems. Fix them, then call complete_build again:\n${audit.errors.map((line) => `- ${line}`).join('\n')}`;
+  }
+  if (audit.warnings.length > 0) {
+    const key = createHash('sha1').update(audit.warnings.join('|')).digest('hex');
+    if (ctx.auditAck !== key) {
+      ctx.auditAck = key;
+      return `The audit has warnings. Fix the ones that matter (theme toggle, tokens over raw hex and inline styles, missing files), then call complete_build again to proceed:\n${audit.warnings.map((line) => `- ${line}`).join('\n')}`;
+    }
   }
   return null;
 }
@@ -298,6 +320,16 @@ async function executeTool(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<{ result: string; stopForQuestion?: boolean }> {
+  if (
+    (name === 'write_file' || name === 'edit_file') &&
+    String(input.path ?? '').replace(/^\.?\//, '') === DESIGN_SYSTEM_CSS &&
+    !ctx.existingPaths.has(DESIGN_SYSTEM_CSS)
+  ) {
+    return {
+      result: `${DESIGN_SYSTEM_CSS} is provided and maintained by the platform and cannot be created or edited. Put brand colour overrides and custom CSS in ${SITE_CSS} (read it first). Use read_skill to read the design-system stylesheet.`,
+    };
+  }
+
   switch (name) {
     case 'ask_plan_question': {
       const question = String(input.question ?? '').trim();
@@ -368,7 +400,8 @@ async function executeTool(
         .filter(
           (file) =>
             !file.startsWith(`${PROMPT_ATTACHMENTS_DIR}/`) &&
-            file !== DESIGN_SYSTEM_CSS,
+            file !== DESIGN_SYSTEM_CSS &&
+            file !== SITE_CSS,
         );
       if (buildable.length > 0) {
         return {
@@ -725,11 +758,11 @@ async function seedDesignSystem(ctx: ToolContext) {
     projectId: ctx.projectId,
     artifactSlug: ctx.artifactSlug,
     artifactId: ctx.artifactId,
-    relativePath: DESIGN_SYSTEM_CSS,
-    content: await renderDesignSystemCss(),
+    relativePath: SITE_CSS,
+    content: SITE_CSS_STUB,
   });
-  ctx.existingPaths.add(DESIGN_SYSTEM_CSS);
-  ctx.onEvent?.({ type: 'action', label: 'Applied design system', path: DESIGN_SYSTEM_CSS, status: 'done' });
+  ctx.existingPaths.add(SITE_CSS);
+  ctx.onEvent?.({ type: 'action', label: 'Applied design system', path: SITE_CSS, status: 'done' });
 }
 
 async function runSession({
@@ -991,10 +1024,14 @@ export async function runAgentLoop({
 
   // Each CLI session is stateless: the prior conversation is replayed as one transcript.
   const transcript = messages
-    .filter((message) => message.role !== 'SYSTEM')
-    .map(
+    .filter(
       (message) =>
-        `[${message.role === 'USER' ? 'user' : 'assistant'}]\n${message.content}`,
+        message.role !== 'SYSTEM' || message.content.startsWith('Plan mode completed'),
+    )
+    .map((message) =>
+      message.role === 'SYSTEM'
+        ? `[approved plan]\n${message.content}`
+        : `[${message.role === 'USER' ? 'user' : 'assistant'}]\n${message.content}`,
     )
     .join('\n\n');
   const transcriptPrompt = `Conversation so far (oldest first). Respond to the latest [user] message by using your tools.\n\n${transcript}`;
@@ -1008,6 +1045,7 @@ export async function runAgentLoop({
     artifactType: artifact.type,
     planMode,
     skillsRead: new Set(),
+    auditAck: null,
     existingPaths: new Set(relativePaths),
     readPaths: new Set(),
     writtenPaths: new Set(),
