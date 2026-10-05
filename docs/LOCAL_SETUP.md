@@ -42,3 +42,9 @@ or configure GitHub/Google OAuth credentials in `.env.local`.
 - Project files: `.data/project-workspace/` (gitignored, outside `public/`)
 - Avatars: `public/uploads/avatars/`
 - Database: docker volume `replit-clone-pgdata`
+
+## Viewing from another device on your LAN
+Set in `.env.local`: `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, `TRUSTED_ORIGINS` to `http://<lan-ip>:3000`,
+`NEXT_PUBLIC_ENABLE_DEV_EMAIL_AUTH=1`, and `ALLOWED_EMAILS=you@example.com` (only these can sign up; empty = nobody).
+Add the IP to `allowedDevOrigins` in `next.config.ts`, then `HOST=<lan-ip> scripts/dev.sh`.
+The login modal's email form then works (Sign up, then Log in). Plain http on a trusted LAN only; see SECURITY_AUDIT.md R1.
