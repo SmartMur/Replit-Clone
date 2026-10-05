@@ -6,6 +6,7 @@ import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import {
   BUILDER_TOOL_PREFIX,
   createBuilderServer,
+  type ToolImage,
 } from '@/lib/agent/mcp-tools';
 import { applyFileEdit } from '@/lib/agent/apply-file-edit';
 import { buildArtifactContextSnapshot } from '@/lib/agent/build-artifact-context';
@@ -63,9 +64,13 @@ import {
   readTemplate,
 } from '@/lib/agent/templates';
 import { createHash } from 'node:crypto';
+import { createSnapshot } from '@/lib/projects/snapshots';
 import { auditSite } from '@/lib/agent/site-audit';
 import { DESIGN_SYSTEM_CSS, SITE_CSS_STUB } from '@/lib/agent/skills-adapter';
 import { SITE_CSS } from '@/lib/preview/design-css';
+import { renderCheck, type RenderReport } from '@/lib/preview/render-check';
+import { serveArtifactFile, serveArtifactIndex } from '@/lib/preview/serve-preview';
+import { listWorkspaceRelativePaths } from '@/lib/preview/list-workspace-paths';
 import {
   listProjectFiles,
   readProjectFile,
@@ -139,6 +144,11 @@ type ToolContext = {
   planMode: boolean;
   skillsRead: Set<string>;
   auditAck: string | null;
+  writeCount: number;
+  checkedAt: number | null;
+  checkCalls: number;
+  lastCheckErrors: number;
+  renderUnavailable: boolean;
   existingPaths: Set<string>;
   readPaths: Set<string>;
   writtenPaths: Set<string>;
@@ -312,14 +322,50 @@ async function checkDesignSystemGate(ctx: ToolContext) {
       return `The audit has warnings. Fix the ones that matter (theme toggle, tokens over raw hex and inline styles, missing files), then call complete_build again to proceed:\n${audit.warnings.map((line) => `- ${line}`).join('\n')}`;
     }
   }
+
+  // The agent must have SEEN the current version of the page, and the check must be clean.
+  if (!ctx.renderUnavailable) {
+    if (ctx.checkedAt !== ctx.writeCount) {
+      return 'You have not checked the latest version of the page in a browser. Call check_preview, look at every screenshot, fix what it reports, then call complete_build.';
+    }
+    if (ctx.lastCheckErrors > 0) {
+      return `The last check_preview reported ${ctx.lastCheckErrors} error(s) that are not fixed yet. Fix them, then call check_preview again before complete_build.`;
+    }
+  }
   return null;
+}
+
+function formatRenderReport(report: RenderReport) {
+  const lines = [`Preview check finished in ${Math.round(report.durationMs / 100) / 10}s.`];
+  lines.push(
+    report.errors.length
+      ? `ERRORS (${report.errors.length}), fix these:\n${report.errors.map((e) => `- ${e}`).join('\n')}`
+      : 'ERRORS: none.',
+  );
+  if (report.warnings.length) lines.push(`WARNINGS:\n${report.warnings.map((w) => `- ${w}`).join('\n')}`);
+  if (report.notes.length) lines.push(`NOTES: ${report.notes.join(' ')}`);
+  lines.push(
+    `Screenshots attached (${report.shots.length}): ${report.shots.map((s) => s.label).join('; ')}. Look at each one. In your final summary say what you saw and what you changed because of it.`,
+  );
+  return lines.join('\n\n');
+}
+
+async function runRenderCheck(ctx: ToolContext, full: boolean, lookAt?: string) {
+  const paths = await listWorkspaceRelativePaths(ctx.projectId, ctx.artifactSlug);
+  const pages = paths.filter((p) => /\.html?$/i.test(p) && !p.includes('/')).sort((a, b) => (a === 'index.html' ? -1 : b === 'index.html' ? 1 : a.localeCompare(b)));
+  return renderCheck({
+    serveIndex: () => serveArtifactIndex(ctx.projectId, ctx.artifactSlug),
+    serveFile: (rel) => serveArtifactFile(ctx.projectId, ctx.artifactSlug, rel),
+    pages: pages.length ? pages : ['index.html'],
+    basePrefix: `/api/projects/${ctx.projectId}/preview/${ctx.artifactSlug}/`,
+  }, { full, lookAt });
 }
 
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
   ctx: ToolContext,
-): Promise<{ result: string; stopForQuestion?: boolean }> {
+): Promise<{ result: string; stopForQuestion?: boolean; images?: ToolImage[] }> {
   if (
     (name === 'write_file' || name === 'edit_file') &&
     String(input.path ?? '').replace(/^\.?\//, '') === DESIGN_SYSTEM_CSS &&
@@ -381,6 +427,32 @@ async function executeTool(
       };
     }
 
+    case 'check_preview': {
+      if (ctx.planMode) {
+        return { result: 'Plan mode is still active. Call complete_plan, build the site, then check it.' };
+      }
+      ctx.checkCalls += 1;
+      if (ctx.checkCalls > 5) {
+        return { result: 'The preview check has already run 5 times in this request. Fix what it reported, then call complete_build.' };
+      }
+      emitAction(ctx, 'Checking the page in a browser');
+      // First check of a run walks the whole page; re-checks send just the top views to keep it cheap.
+      const lookAt = String(input.look_at ?? '').trim() || undefined;
+      const report = await runRenderCheck(ctx, ctx.checkCalls === 1, lookAt);
+      if (!report.available) {
+        ctx.renderUnavailable = true;
+        return {
+          result: `The preview check is unavailable (${report.reason ?? 'unknown reason'}). Continue, but do NOT claim you looked at the rendered page; say plainly that it was not visually checked.`,
+        };
+      }
+      ctx.checkedAt = ctx.writeCount;
+      ctx.lastCheckErrors = report.errors.length;
+      return {
+        result: formatRenderReport(report),
+        images: report.shots.map((shot) => ({ data: shot.data, mimeType: shot.mimeType })),
+      };
+    }
+
     case 'use_template': {
       const id = String(input.template ?? '').trim();
       if (!id) {
@@ -431,6 +503,7 @@ async function executeTool(
         upsertFileWrite(ctx, name, content, 'done');
       }
       ctx.previewVersion += 1;
+      ctx.writeCount += 1;
       emitAction(ctx, `Started from template: ${template.meta.name}`);
 
       return {
@@ -565,6 +638,7 @@ async function executeTool(
       ctx.writtenPaths.add(filePath);
       ctx.readPaths.add(filePath);
       ctx.previewVersion += 1;
+      ctx.writeCount += 1;
       upsertFileWrite(ctx, filePath, editResult.content, 'done');
       emitAction(
         ctx,
@@ -625,6 +699,7 @@ async function executeTool(
       ctx.existingPaths.add(filePath);
       ctx.readCache.set(filePath, content);
       ctx.previewVersion += 1;
+      ctx.writeCount += 1;
       upsertFileWrite(ctx, filePath, content, 'done');
       return { result: `Saved ${filePath} (${content.length} bytes).` };
     }
@@ -789,7 +864,7 @@ async function runSession({
   const { server, allowedTools } = createBuilderServer(
     ctx.planMode,
     async (name, args) => {
-      const { result, stopForQuestion } = await executeTool(name, args, ctx);
+      const { result, stopForQuestion, images } = await executeTool(name, args, ctx);
 
       if (name === 'complete_plan' && ctx.planCompleted) {
         restartAfterPlan = true;
@@ -802,7 +877,7 @@ async function runSession({
         summary = result;
         done = true;
       }
-      return result;
+      return images?.length ? { text: result, images } : result;
     },
   );
 
@@ -981,6 +1056,14 @@ export async function runAgentLoop({
 
   const messages = rawMessages.slice().reverse();
 
+  // Safety net: before the agent changes an existing site, keep a restorable copy.
+  if (artifactFiles.some((file) => !file.path.startsWith(`${artifact.slug}/${PROMPT_ATTACHMENTS_DIR}/`))) {
+    const lastUser = [...messages].reverse().find((message) => message.role === 'USER')?.content ?? '';
+    await createSnapshot(projectId, artifact.slug, `before agent run: ${lastUser.replace(/\s+/g, ' ').slice(0, 80)}`).catch((error) => {
+      console.error('snapshot failed (continuing):', error instanceof Error ? error.message : error);
+    });
+  }
+
   const planMode = messages.some(
     (message) =>
       message.role === 'SYSTEM' && isPlanModeMessage(message.content),
@@ -1046,6 +1129,11 @@ export async function runAgentLoop({
     planMode,
     skillsRead: new Set(),
     auditAck: null,
+    writeCount: 0,
+    checkedAt: null,
+    checkCalls: 0,
+    lastCheckErrors: 0,
+    renderUnavailable: false,
     existingPaths: new Set(relativePaths),
     readPaths: new Set(),
     writtenPaths: new Set(),

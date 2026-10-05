@@ -10,6 +10,7 @@ export const BUILDER_TOOL_PREFIX = `mcp__${BUILDER_SERVER_NAME}__`;
 const SHAPES: Record<string, z.ZodRawShape> = {
   list_files: {},
   use_template: { template: z.string().optional() },
+  check_preview: { look_at: z.string().optional() },
   read_skill: { skill: z.string(), path: z.string().optional() },
   read_file: { path: z.string().describe('Relative file path, e.g. index.html') },
   edit_file: {
@@ -27,10 +28,12 @@ const SHAPES: Record<string, z.ZodRawShape> = {
   complete_plan: { plan: z.string() },
 };
 
+export type ToolImage = { data: string; mimeType: string };
+export type ToolOutput = string | { text: string; images?: ToolImage[] };
 export type ToolRunner = (
   name: string,
   args: Record<string, unknown>,
-) => Promise<string>;
+) => Promise<ToolOutput>;
 
 /**
  * In-process MCP server exposing only the builder tools for the current phase.
@@ -42,14 +45,21 @@ export function createBuilderServer(planMode: boolean, run: ToolRunner) {
     const shape = SHAPES[def.name];
     if (!shape) return [];
     return [
-      tool(def.name, def.description ?? def.name, shape, async (args) => ({
-        content: [
-          {
-            type: 'text' as const,
-            text: await run(def.name, args as Record<string, unknown>),
-          },
-        ],
-      })),
+      tool(def.name, def.description ?? def.name, shape, async (args) => {
+        const output = await run(def.name, args as Record<string, unknown>);
+        const text = typeof output === 'string' ? output : output.text;
+        const images = typeof output === 'string' ? [] : (output.images ?? []);
+        return {
+          content: [
+            { type: 'text' as const, text },
+            ...images.map((image) => ({
+              type: 'image' as const,
+              data: image.data,
+              mimeType: image.mimeType,
+            })),
+          ],
+        };
+      }),
     ];
   });
 

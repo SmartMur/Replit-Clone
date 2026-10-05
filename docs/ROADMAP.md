@@ -19,6 +19,12 @@ Evidence: 12 agent turns across three EstherCare builds (owner feedback verbatim
 - Production export, launch gate, EstherCare polish pass (see docs/launch/esthercare.md).
 - Lesson: automated scores (Lighthouse 100) missed two invisible-text bugs. A screenshot-based visual check belongs in the agent loop (session 2).
 
+## Session 2 (done on branch feat/session2-render-check)
+- `check_preview`: headless Chrome renders desktop, phone and dark mode; measured findings (invisible text via a pixel-vs-computed-colour detector, sideways scroll, broken/blocked images, console errors, tap targets, axe-core) and screenshots go back to the agent. First check walks the whole page (7 views), re-checks send 3; `look_at` crops around the thing just edited. `complete_build` is blocked until the latest version was checked and has no errors; if Chrome is unavailable the agent must say the page was not visually checked.
+- Snapshots before every agent run on an existing site; `bun run scripts/snapshots.ts list|create|restore`.
+- Tests: tests/render-check.test.ts (7), tests/snapshots.test.ts (5), tests/site-audit.test.ts (13).
+- Proven end to end: the agent found and fixed a real historical invisible-button bug on its own, and reported honestly what it did and did not see.
+
 ## Next
-- Session 2: headless-Chrome render check with screenshots fed back to the agent; snapshots before template/design-system swaps and `apply_template`; image upload panel.
-- Session 3: `capture_reference(url)` with SSRF defences (https/443 only, resolve and refuse private ranges, pin IP, re-check redirects and subresources, size/time caps, untrusted-content wrapping).
+- Session 3a: image slots (named, with an upload panel and optional Codex image generation) so generated sites are not text-only; `apply_template` (restyle/replace with snapshot, restore button in the editor).
+- Session 3b: `capture_reference(url)` with SSRF defences (https/443 only, resolve and refuse private ranges, pin IP, re-check redirects and subresources, size/time caps, untrusted-content wrapping).
