@@ -172,7 +172,12 @@ export function AuthModal() {
     const params = new URLSearchParams(window.location.search);
     const callback = params.get('callbackUrl');
 
-    if (callback?.startsWith('/')) {
+    // Only same-site paths; never bounce back to an auth entry route (e.g. /signup) that may not exist.
+    if (
+      callback?.startsWith('/') &&
+      !callback.startsWith('//') &&
+      !/^\/(signup|login|sign-up|sign-in)(\/|\?|$)/.test(callback)
+    ) {
       return callback;
     }
     return DEFAULT_CALLBACK_URL;

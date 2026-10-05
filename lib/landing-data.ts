@@ -289,7 +289,7 @@ export const pricingPlans: PricingPlan[] = [
     monthlyPrice: 0,
     yearlyPrice: 0,
     ctaLabel: "Sign up",
-    ctaHref: "/signup",
+    ctaHref: "/?auth=register",
     features: [
       "Free daily Agent credits",
       "Built-in database for full-stack apps",
