@@ -25,7 +25,7 @@ export const FREE_PRIVATE_DEPLOYMENT_LIMIT = 1;
 const FREE_AGENT_LIMITS: AgentLimits = {
   maxTurns: 12,
   maxTokens: 8_192,
-  model: 'claude-sonnet-4-6',
+  model: getAnthropicModel(),
 };
 
 const PRO_AGENT_LIMITS: AgentLimits = {

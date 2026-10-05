@@ -20,6 +20,15 @@ const bodySchema = z.object({
   initialReply: z.boolean().optional(),
 });
 
+// One agent run per project at a time, and a global cap: runs share the owner's
+// subscription rate limits and each spawns a CLI process.
+const MAX_CONCURRENT_RUNS = Number(process.env.MAX_CONCURRENT_AGENT_RUNS ?? 2);
+const RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const globalForRuns = globalThis as unknown as {
+  agentRuns?: Map<string, AbortController>;
+};
+const activeRuns = (globalForRuns.agentRuns ??= new Map());
+
 function encodeSse(event: AgentStreamEvent) {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
@@ -71,6 +80,28 @@ export async function POST(
 
   const billingUser = await getUserBillingFields(userId);
   const agentLimits = getAgentLimits(getAppTier(billingUser));
+
+  if (activeRuns.has(projectId)) {
+    return new Response(
+      JSON.stringify({ error: 'The agent is already working on this project.' }),
+      { status: 409 },
+    );
+  }
+  if (activeRuns.size >= MAX_CONCURRENT_RUNS) {
+    return new Response(
+      JSON.stringify({ error: 'The agent is busy. Try again in a minute.' }),
+      { status: 429 },
+    );
+  }
+
+  const runAbort = new AbortController();
+  activeRuns.set(projectId, runAbort);
+  const timeout = setTimeout(() => runAbort.abort(), RUN_TIMEOUT_MS);
+  request.signal.addEventListener('abort', () => runAbort.abort());
+  const release = () => {
+    clearTimeout(timeout);
+    if (activeRuns.get(projectId) === runAbort) activeRuns.delete(projectId);
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -126,6 +157,7 @@ export async function POST(
           projectId,
           artifactId: artifact.id,
           limits: agentLimits,
+          signal: runAbort.signal,
           onEvent: send,
         });
 
@@ -178,7 +210,12 @@ export async function POST(
           error instanceof Error ? error.message : 'Agent failed.';
         send({ type: 'error', message });
       } finally {
-        controller.close();
+        release();
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
       }
     },
   });
