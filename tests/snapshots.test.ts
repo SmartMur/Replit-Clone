@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, writeFile, readdir } from 'node:fs/promises';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -14,6 +14,11 @@ beforeAll(async () => {
   snap = await import('../lib/projects/snapshots');
   // Use whatever workspace root the module resolved, so the suite passes alone or alongside other files.
   wsDir = (await import('../lib/project-files')).artifactWorkspaceDir;
+});
+
+afterAll(async () => {
+  // Remove every fixture this file created, wherever the workspace root resolved to.
+  for (const id of ['p1', 'p-prune', 'p-empty']) await rm(path.dirname(wsDir(id, 'main')), { recursive: true, force: true });
 });
 
 async function seed(files: Record<string, string>, projectId = 'p1') {
