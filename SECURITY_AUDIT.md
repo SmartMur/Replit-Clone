@@ -51,3 +51,11 @@ Third-party instruction content (vendor/bm-skills, pinned d42872f, 64 files, sha
 - Measured finding: upstream bm-design-system light-mode accent pairs fail WCAG AA (btn-primary 2.36:1, text-accent 2.36:1, accent-display text 3.36:1, btn-danger 3.74:1, signal 2.09:1). An overlay appended to the seeded copy adds accent-strong/danger-strong tokens (5.49:1 on white), underlines in-text links and fixes the pressed toggle. The vendored file is unchanged.
 - The Tailwind browser runtime makes a stray request for `tailwindcss` virtual paths; the preview server answers those with an empty stylesheet.
 - Agent edits can still introduce defects (a malformed `<dl>` scored 96). A server-side accessibility check at complete_build would catch this class; not built.
+
+## EstherCare production pass (2026-10-05)
+Three independent reviews (copy, secure coding, visual and mobile) plus hands-on tests in a real browser.
+- Site code: no exploitable XSS. Hostile input is shown as plain text (tested end to end against a stub endpoint); no `innerHTML`, `eval` or inline handlers remain after removing the SVG illustration generator; no third-party scripts; no `target=_blank`.
+- Fixed: both forms silently discarded submissions (now: real endpoint support, honest error, email-draft fallback, consent checkbox, honeypot, minimum fill time); no privacy notice (draft added); focus return and Escape handling; slider pause control and reduced-motion support (WCAG 2.2.2); touch targets 44px; headings order; contrast on the blue bands; invisible button label and invisible consent link (both `.on-dark a` overriding white-on-white; automated accessibility tools did not catch them, screenshots did).
+- Production export (`scripts/export-static.ts`): precompiled CSS (47KB) instead of a 282KB in-browser runtime, self-hosted fonts, no inline scripts or styles, strict CSP verified with zero violations, security headers, 404, robots, sitemap, security.txt, canonical and social tags; refuses to export while sample content remains.
+- Platform change: the accessibility overlay now underlines links inside labels; sample markers are lighter.
+- Open: previews on the app origin (R1), forms need a real endpoint, privacy notice needs legal review, owner-only claims in docs/launch/esthercare.md.
