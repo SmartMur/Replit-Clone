@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{Page title}} · {{App name}}</title>
+  <meta name="description" content="{{One sentence describing this screen}}">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function () { try { var s = localStorage.getItem('bm-ds-theme'); var t = s === 'light' || s === 'dark' || s === 'system' ? s : 'system'; var r = t === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t; if (r === 'dark') document.documentElement.classList.add('dark'); } catch (e) {} })();
+  </script>
+  <link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-page focus:px-3 focus:py-2">Skip to content</a>
+  <div class="flex min-h-screen bg-page text-ink-body">
+    <aside class="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-hairline bg-page lg:flex">
+      <div class="flex h-16 items-center gap-2 px-4 font-semibold text-ink-display">
+        <img src="icon.svg" alt="" width="28" height="28">
+        <span>{{App name}}</span>
+      </div>
+      <nav aria-label="Primary" class="flex flex-1 flex-col gap-1 px-3 py-2">
+          <a href="index.html" aria-current="page" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline hover:no-underline bg-surface text-ink-display"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>{{Nav item one}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>{{Nav item}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>{{Nav item}}</span></a>
+      </nav>
+      <div class="border-t border-hairline p-3">
+        <button type="button" class="btn btn-ghost btn-small w-full justify-start" data-theme-toggle>Toggle theme</button>
+      </div>
+    </aside>
+
+    <div class="min-w-0 flex-1">
+      <header class="flex items-center justify-between border-b border-hairline px-4 py-3 lg:hidden">
+        <span class="flex items-center gap-2 font-semibold text-ink-display"><img src="icon.svg" alt="" width="24" height="24">{{App name}}</span>
+        <button type="button" class="btn btn-secondary btn-small" data-menu-toggle aria-expanded="false" aria-controls="mobile-nav">Menu</button>
+      </header>
+      <nav id="mobile-nav" aria-label="Primary mobile" hidden class="flex flex-col gap-1 border-b border-hairline px-4 py-3 lg:hidden">
+          <a href="index.html" aria-current="page" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline hover:no-underline bg-surface text-ink-display"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>{{Nav item one}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>{{Nav item}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>{{Nav item}}</span></a>
+      </nav>
+
+      <main id="main" class="px-6 py-8 sm:px-10">
+        <div class="mx-auto max-w-4xl">
+          <div class="flex flex-col gap-4 border-b border-hairline pb-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1>{{Page heading}}</h1>
+              <p class="mt-1">{{One sentence describing this page}}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a class="btn btn-primary" href="{{Primary action link}}">{{Primary action}}</a>
+            </div>
+          </div>
+
+          <dl class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-md border border-hairline p-4"><dt class="text-sm text-ink-muted">{{Metric one label}}</dt><dd class="mt-1 text-2xl font-semibold text-ink-display">{{Value}}</dd></div>
+            <div class="rounded-md border border-hairline p-4"><dt class="text-sm text-ink-muted">{{Metric two label}}</dt><dd class="mt-1 text-2xl font-semibold text-ink-display">{{Value}}</dd></div>
+            <div class="rounded-md border border-hairline p-4"><dt class="text-sm text-ink-muted">{{Metric three label}}</dt><dd class="mt-1 text-2xl font-semibold text-ink-display">{{Value}}</dd></div>
+            <div class="rounded-md border border-hairline p-4"><dt class="text-sm text-ink-muted">{{Metric four label}}</dt><dd class="mt-1 text-2xl font-semibold text-ink-display">{{Value}}</dd></div>
+          </dl>
+
+          <section class="mt-8" aria-labelledby="recent-heading">
+            <h2 id="recent-heading" class="text-xl">{{Recent activity heading}}</h2>
+            <ul class="mt-4 divide-y divide-hairline overflow-hidden rounded-md border border-hairline bg-page">
+              <li class="flex items-center gap-3 px-4 py-3">
+                <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-ink-display">{{Item title}}</p><p class="truncate text-xs text-ink-muted">{{Item detail}}</p></div>
+                <span class="badge badge-accent">{{Status}}</span>
+              </li>
+              <li class="flex items-center gap-3 px-4 py-3">
+                <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-ink-display">{{Item title}}</p><p class="truncate text-xs text-ink-muted">{{Item detail}}</p></div>
+                <span class="badge badge-neutral">{{Status}}</span>
+              </li>
+              <li class="flex items-center gap-3 px-4 py-3">
+                <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-ink-display">{{Item title}}</p><p class="truncate text-xs text-ink-muted">{{Item detail}}</p></div>
+                <span class="badge badge-muted">{{Status}}</span>
+              </li>
+            </ul>
+          </section>
+
+          <div class="callout mt-8">
+            <h3 class="text-lg">{{Helpful tip or empty-state message}}</h3>
+            <p class="mt-1 text-sm">{{One sentence explaining the next best step.}}</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

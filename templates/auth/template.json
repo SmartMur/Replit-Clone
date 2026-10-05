@@ -1,0 +1,13 @@
+{
+  "id": "auth",
+  "name": "Sign-in screens",
+  "description": "Three pages (index.html = log in, signup.html, forgot.html) using the centered callout card, labelled fields, client-side validation and a live status region. Front end only, no backend.",
+  "bestFor": "login/signup flows, gated apps, account entry",
+  "files": [
+    "index.html",
+    "signup.html",
+    "forgot.html",
+    "script.js",
+    "icon.svg"
+  ]
+}

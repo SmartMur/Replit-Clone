@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{Page title}} · {{App name}}</title>
+  <meta name="description" content="{{One sentence describing this screen}}">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function () { try { var s = localStorage.getItem('bm-ds-theme'); var t = s === 'light' || s === 'dark' || s === 'system' ? s : 'system'; var r = t === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t; if (r === 'dark') document.documentElement.classList.add('dark'); } catch (e) {} })();
+  </script>
+  <link rel="stylesheet" href="design-system.css">
+</head>
+<body>
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-page focus:px-3 focus:py-2">Skip to content</a>
+  <div class="flex min-h-screen bg-page text-ink-body">
+    <aside class="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-hairline bg-page lg:flex">
+      <div class="flex h-16 items-center gap-2 px-4 font-semibold text-ink-display">
+        <img src="icon.svg" alt="" width="28" height="28">
+        <span>{{App name}}</span>
+      </div>
+      <nav aria-label="Primary" class="flex flex-1 flex-col gap-1 px-3 py-2">
+                    <a href="index.html" aria-current="page" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline hover:no-underline bg-surface text-ink-display"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>{{Nav item}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>{{Nav item}}</span></a>
+      </nav>
+      <div class="border-t border-hairline p-3">
+        <button type="button" class="btn btn-ghost btn-small w-full justify-start" data-theme-toggle>Toggle theme</button>
+      </div>
+    </aside>
+
+    <div class="min-w-0 flex-1">
+      <header class="flex items-center justify-between border-b border-hairline px-4 py-3 lg:hidden">
+        <span class="flex items-center gap-2 font-semibold text-ink-display"><img src="icon.svg" alt="" width="24" height="24">{{App name}}</span>
+        <button type="button" class="btn btn-secondary btn-small" data-menu-toggle aria-expanded="false" aria-controls="mobile-nav">Menu</button>
+      </header>
+      <nav id="mobile-nav" aria-label="Primary mobile" hidden class="flex flex-col gap-1 border-b border-hairline px-4 py-3 lg:hidden">
+                    <a href="index.html" aria-current="page" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline hover:no-underline bg-surface text-ink-display"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>{{Nav item}}</span></a>
+          <a href="{{Nav link}}" class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-ink-body no-underline hover:bg-surface hover:no-underline"><svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>{{Nav item}}</span></a>
+      </nav>
+
+      <main id="main" class="px-6 py-8 sm:px-10">
+        <div class="mx-auto max-w-4xl">
+          <div class="flex flex-col gap-4 border-b border-hairline pb-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1>{{Page heading}}</h1>
+              <p class="mt-1">{{One sentence describing this page}}</p>
+            </div>
+            </div>
+
+          <form class="mt-6 space-y-8" id="settings-form" novalidate>
+            <section aria-labelledby="profile-heading" class="space-y-4">
+              <h2 id="profile-heading" class="text-xl">{{Profile section heading}}</h2>
+              <div class="space-y-2"><label for="name">{{Name field label}}</label><input id="name" name="name" type="text" class="form-control" autocomplete="name"></div>
+              <div class="space-y-2"><label for="email">Email</label><input id="email" name="email" type="email" class="form-control" autocomplete="email"></div>
+              <div class="space-y-2"><label for="role">{{Select field label}}</label>
+                <select id="role" name="role" class="form-control form-control-select"><option>{{Option one}}</option><option>{{Option two}}</option></select></div>
+              <div class="space-y-2"><label for="bio">{{Textarea label}}</label><textarea id="bio" name="bio" class="form-control form-control-textarea"></textarea></div>
+            </section>
+
+            <section aria-labelledby="notify-heading" class="space-y-3">
+              <h2 id="notify-heading" class="text-xl">{{Preferences section heading}}</h2>
+              <div class="flex items-center justify-between gap-4 rounded-md border border-hairline px-4 py-3">
+                <div><p class="text-sm font-medium text-ink-display">{{Preference one}}</p><p class="text-xs text-ink-muted">{{What it does}}</p></div>
+                <button type="button" class="toggle-button" aria-pressed="true" data-toggle>On</button>
+              </div>
+              <div class="flex items-center justify-between gap-4 rounded-md border border-hairline px-4 py-3">
+                <div><p class="text-sm font-medium text-ink-display">{{Preference two}}</p><p class="text-xs text-ink-muted">{{What it does}}</p></div>
+                <button type="button" class="toggle-button" aria-pressed="false" data-toggle>Off</button>
+              </div>
+            </section>
+
+            <div class="flex items-center gap-3">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+              <p id="form-status" role="status" class="text-sm text-ink-muted"></p>
+            </div>
+          </form>
+
+          <section class="callout callout-danger mt-10" aria-labelledby="danger-heading">
+            <h2 id="danger-heading" class="text-xl">{{Danger zone heading}}</h2>
+            <p class="mt-1 text-sm">{{Plain-language warning about what cannot be undone.}}</p>
+            <button type="button" class="btn btn-danger mt-4">{{Destructive action}}</button>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

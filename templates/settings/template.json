@@ -1,0 +1,11 @@
+{
+  "id": "settings",
+  "name": "Settings page",
+  "description": "App shell with a settings form (inputs, select, textarea), preference toggles (aria-pressed) and a danger-zone callout.",
+  "bestFor": "account and preference screens, profile editors",
+  "files": [
+    "index.html",
+    "script.js",
+    "icon.svg"
+  ]
+}

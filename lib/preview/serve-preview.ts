@@ -58,7 +58,7 @@ async function applyDesignSystem(
     ? `<script>${(await readTailwindRuntime()).replace(/<\/script/gi, '<\\/script')}</script>`
     : `<script src="${TAILWIND_RUNTIME_PATH}"></script>`;
   // The browser runtime defines no utilities unless the stylesheet imports Tailwind itself.
-  const source = /@import\s+["']tailwindcss["']/.test(css)
+  const source = /@import\s+["']tailwindcss/.test(css)
     ? css
     : `@import "tailwindcss";\n${css}`;
   const style = `<style type="text/tailwindcss">\n${source.replace(/<\/style/gi, '<\\/style')}\n</style>`;
@@ -161,6 +161,16 @@ export async function serveArtifactFile(
         contentType: 'text/javascript; charset=utf-8',
       };
     }
+  }
+
+  // The Tailwind browser runtime resolves @import "tailwindcss..." itself, but the page also
+  // makes a stray request for these virtual paths. Answer with an empty stylesheet so the
+  // console stays clean; styling is unaffected.
+  if (/^tailwindcss(\/(theme|preflight|utilities)\.css)?$/.test(relativePath)) {
+    return {
+      body: '/* provided by the Tailwind browser runtime */',
+      contentType: 'text/css; charset=utf-8',
+    };
   }
 
   if (relativePath === TAILWIND_RUNTIME_PATH) {

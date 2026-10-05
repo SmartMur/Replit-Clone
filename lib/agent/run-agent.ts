@@ -56,6 +56,12 @@ import { formatBundleError } from '@/lib/preview/format-bundle-error';
 import { artifactWorkspaceDir } from '@/lib/project-files';
 import { mkdir } from 'node:fs/promises';
 import { readSkill } from '@/lib/agent/skills';
+import {
+  PLACEHOLDER,
+  formatTemplateList,
+  listTemplates,
+  readTemplate,
+} from '@/lib/agent/templates';
 import { DESIGN_SYSTEM_CSS, renderDesignSystemCss } from '@/lib/agent/skills-adapter';
 import {
   listProjectFiles,
@@ -264,6 +270,21 @@ async function checkDesignSystemGate(ctx: ToolContext) {
     return 'This site uses the bm-design-system engine. Call read_skill with skill "bm-design-system" and path "SKILL.md" (and references/agent-instructions.md), then restyle using its tokens and component classes before completing.';
   }
 
+  const files = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
+  const prefix = `${ctx.artifactSlug}/`;
+  for (const file of files) {
+    const name = file.path.slice(prefix.length);
+    if (!/\.(html|js)$/i.test(name) || name.startsWith(`${PROMPT_ATTACHMENTS_DIR}/`)) continue;
+    const text = await readProjectFile(ctx.projectId, ctx.artifactSlug, name);
+    if (/\.html$/i.test(name) && text && /<table\b/i.test(text) && !/overflow-x-auto/.test(text)) {
+      return `${name} has a <table> that is not inside a scroll container, which overflows phones. Wrap every table in <div class="overflow-x-auto"> (keep the page itself from scrolling sideways at 375px), then call complete_build again.`;
+    }
+    if (text && PLACEHOLDER.test(text)) {
+      const sample = text.match(PLACEHOLDER)?.[0];
+      return `${name} still contains template placeholders such as ${sample}. Replace every {{placeholder}} with real content (or remove the element) in every file, then call complete_build again.`;
+    }
+  }
+
   const html = await readProjectFile(ctx.projectId, ctx.artifactSlug, 'index.html');
   if (html === null) return null;
   if (!/<link\b[^>]*href=["']design-system\.css["']/i.test(html)) {
@@ -325,6 +346,62 @@ async function executeTool(
         result: files
           .map((file) => file.path.replace(`${ctx.artifactSlug}/`, ''))
           .join('\n'),
+      };
+    }
+
+    case 'use_template': {
+      const id = String(input.template ?? '').trim();
+      if (!id) {
+        return { result: formatTemplateList(await listTemplates()) };
+      }
+      if (ctx.planMode) {
+        return {
+          result:
+            'Plan mode is still active. Name the chosen template in your plan, call complete_plan, then call use_template.',
+        };
+      }
+
+      const current = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
+      const prefix = `${ctx.artifactSlug}/`;
+      const buildable = current
+        .map((file) => file.path.slice(prefix.length))
+        .filter(
+          (file) =>
+            !file.startsWith(`${PROMPT_ATTACHMENTS_DIR}/`) &&
+            file !== DESIGN_SYSTEM_CSS,
+        );
+      if (buildable.length > 0) {
+        return {
+          result: `This artifact already has files (${buildable.slice(0, 5).join(', ')}). Templates only seed an empty artifact; edit the existing files instead.`,
+        };
+      }
+
+      const template = await readTemplate(id);
+      if (!template) {
+        return {
+          result: `Unknown template "${id}".\n${formatTemplateList(await listTemplates())}`,
+        };
+      }
+
+      for (const [name, content] of Object.entries(template.files)) {
+        await writeProjectFile({
+          projectId: ctx.projectId,
+          artifactSlug: ctx.artifactSlug,
+          artifactId: ctx.artifactId,
+          relativePath: name,
+          content,
+        });
+        ctx.writtenPaths.add(name);
+        ctx.existingPaths.add(name);
+        ctx.readPaths.add(name);
+        ctx.readCache.set(name, content);
+        upsertFileWrite(ctx, name, content, 'done');
+      }
+      ctx.previewVersion += 1;
+      emitAction(ctx, `Started from template: ${template.meta.name}`);
+
+      return {
+        result: `Template "${template.meta.id}" saved: ${Object.keys(template.files).join(', ')}. You have effectively read these files. Replace EVERY {{placeholder}} with real content for this project (page titles, copy, links, labels), delete sections that do not apply, add what is missing, then call complete_build. index.html currently contains:\n\n${template.files['index.html'] ?? ''}`,
       };
     }
 
