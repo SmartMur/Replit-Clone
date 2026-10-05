@@ -20,8 +20,10 @@ await mkdir(outDir, { recursive: true });
 
 function runCodex(cwd, prompt) {
   return new Promise((resolve, reject) => {
-    execFile('codex', ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd, prompt],
+    const child = execFile('codex', ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd, prompt],
       { timeout: 280_000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => err ? reject(new Error(String(stderr || err).slice(0, 300))) : resolve(stdout));
+    // codex exec waits for piped stdin to close before it starts; we pass the prompt as an argument.
+    child.stdin.end();
   });
 }
 

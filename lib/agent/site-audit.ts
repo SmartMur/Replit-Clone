@@ -175,7 +175,7 @@ export async function auditSite(input: AuditInput): Promise<AuditReport> {
   const inlineStyles = (visible.match(/\sstyle=["']/g) ?? []).length;
   if (inlineStyles > 8) errors.push(`${inlineStyles} inline style attributes. Move them to site.css classes or use design-system tokens.`);
   else if (inlineStyles > 0) warnings.push(`${inlineStyles} inline style attribute(s); prefer tokens and site.css classes.`);
-  const rawHex = (visible.match(/#[0-9a-fA-F]{6}\b/g) ?? []).length;
+  const rawHex = (visible.replace(/\sdata-[a-z-]+=["'][^"']*["']/gi, '').match(/#[0-9a-fA-F]{6}\b/g) ?? []).length;
   if (rawHex > 3) warnings.push(`${rawHex} raw hex colours in the HTML; use colour tokens.`);
   if (htmlFiles.length && !/data-theme-toggle|bm-ds-theme[\s\S]{0,400}(?:setItem|toggle)|Toggle (?:dark|theme)/i.test(html + Object.values(input.texts).join('\n').slice(0, 60000))) {
     warnings.push('No light/dark theme toggle found; the design system supports it (data-theme-toggle button + script).');
