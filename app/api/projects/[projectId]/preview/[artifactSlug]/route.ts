@@ -28,6 +28,7 @@ export async function GET(
       headers: {
         'Content-Type': served.contentType,
         'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch {

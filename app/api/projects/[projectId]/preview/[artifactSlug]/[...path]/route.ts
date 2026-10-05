@@ -40,6 +40,7 @@ export async function GET(
 
   const download = new URL(request.url).searchParams.get('download') === '1';
   const fileName = relativePath.split('/').pop() ?? 'download';
+  const safeFileName = fileName.replace(/[^\w.\-() ]+/g, '_') || 'download';
 
   try {
     const served = await serveArtifactFile(
@@ -54,8 +55,11 @@ export async function GET(
       headers: {
         'Content-Type': served.contentType,
         'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
         ...(download
-          ? { 'Content-Disposition': `attachment; filename="${fileName}"` }
+          ? {
+              'Content-Disposition': `attachment; filename="${safeFileName}"`,
+            }
           : {}),
       },
     });

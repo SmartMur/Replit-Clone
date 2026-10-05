@@ -1,0 +1,32 @@
+# Security audit (2026-10-05)
+
+Scope: full read of auth, agent tools, preview/bundler, file storage, server
+actions, Stripe webhook, dependencies. Upstream is a third-party tutorial
+project (fork of `aalleejustadev/Replit-Clone`, 3 commits). Findings were
+reproduced against a running instance before fixing.
+
+## Fixed in `hardening/local-setup`
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| 1 | Critical | **Path traversal via `artifactSlug`** in `/api/projects/:id/preview/:slug/...`. The slug was never validated, so `..%2f..%2f..` as the slug moved the served root up to the app directory. Reproduced: unauthenticated read of `package.json` and `.env.local` (DB URL, auth secret) whenever any project had a public deployment, and by any logged-in user for projects they could access. | `artifactWorkspaceDir()` now validates project id and slug against `^[A-Za-z0-9][A-Za-z0-9_-]*$` and throws otherwise; every caller goes through it. |
+| 2 | High | **Prefix-only containment check** (`startsWith(dir)` with no separator) in 3 places, so `/ws/abc` also "contains" `/ws/abc-evil`. | New `isPathInside()` (separator-aware), used everywhere. |
+| 3 | High | **Project files stored under `public/`**, so Next served them statically and skipped the preview authorization (images/SVG bypass the auth proxy entirely). | Workspace moved to `.data/project-workspace` (override `PROJECT_WORKSPACE_ROOT`), outside `public/`. Sample project committed by upstream removed from tracking. |
+| 4 | High | **esbuild bundler could read any host file.** `import x from '../../../../some.json'` (or a bare package) was bundled into the served JS. Reachable by anything the agent writes, including prompt-injected content. | `confineToWorkspacePlugin`: every resolved import must be inside the artifact folder; only the CDN-mapped React packages stay external. Verified both the block and a normal local import. |
+| 5 | Critical (dep) | Next.js 16.2.9: unauthenticated RCE advisories (image optimizer with AVIF, `next/og`), plus vulnerable postcss and sharp. | Upgraded to `next@16.3.8`, `eslint-config-next@16.3.8`; ran `npm audit fix`. |
+| 6 | Low | `Content-Disposition` filename built from unsanitized path. | Sanitized. Also added `X-Content-Type-Options: nosniff` on preview responses. |
+| 7 | Info | Local login impossible without OAuth apps. | `ENABLE_DEV_EMAIL_AUTH=1` enables email/password; hard-disabled when `NODE_ENV=production`. |
+
+## Reviewed, no issue found
+- Server actions and API routes check the session and project membership (`getAccessibleProject`) before acting.
+- Stripe webhook verifies the signature and de-duplicates events.
+- Agent tools are file-only (list/read/write/edit); there is no shell or network tool. File paths go through `normalizeRelativePath` and containment.
+- Avatar upload allow-lists MIME type and derives the extension from it; served as an image type.
+- Registry packages all have verified signatures; no git/URL dependencies.
+
+## Residual risks (not fixed)
+- **R1: previews run on the app origin.** Generated HTML/JS is served from `/api/projects/.../preview/...` with the user's session cookie. Script in a generated site can call the app's own endpoints as the logged-in user. Acceptable for single-user localhost where you wrote the prompts; **not acceptable for multi-user or public hosting.** Proper fix is a separate preview origin (for example `*.preview.example.com`) or sandboxed iframes plus signed URLs. Do not expose this instance publicly until that is done.
+- **R2: 9 high `npm audit` findings remain**, all in Prisma's CLI toolchain (`prisma` → `@prisma/dev` → `mysql2`, `deepmerge-ts`, `@prisma/config`). They are not loaded by the running app (it uses the `pg` adapter). npm's suggested "fix" is a downgrade to Prisma 6 and was not applied.
+- **R3: previews load React from esm.sh** (CDN import map) in the browser. Pin versions or self-host before relying on this.
+- **R4: no rate limiting** on the agent endpoint beyond per-plan turn limits; the Anthropic key bills per call.
+- **R5: avatar MIME check trusts the client-declared type** (content not sniffed). Low impact because the extension fixes the served type.

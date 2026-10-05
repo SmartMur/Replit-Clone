@@ -2,14 +2,44 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "./prisma";
 
-export const PROJECT_WORKSPACE_ROOT = path.join(
-  process.cwd(),
-  "public",
-  "project-workspace",
+/**
+ * Project files live OUTSIDE `public/` so Next never serves them statically
+ * (that would bypass the preview authorization). Override with
+ * PROJECT_WORKSPACE_ROOT if you want them elsewhere.
+ */
+export const PROJECT_WORKSPACE_ROOT = path.resolve(
+  process.env.PROJECT_WORKSPACE_ROOT ||
+    path.join(process.cwd(), ".data", "project-workspace"),
 );
 
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function assertSafeId(value: string, label: string) {
+  if (!SAFE_ID.test(value)) {
+    throw new Error(`Invalid ${label}.`);
+  }
+  return value;
+}
+
+/** True when `target` is `root` or sits inside it (separator-aware). */
+export function isPathInside(root: string, target: string) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(target);
+  return (
+    resolvedTarget === resolvedRoot ||
+    resolvedTarget.startsWith(resolvedRoot + path.sep)
+  );
+}
+
+export function projectWorkspaceDir(projectId: string) {
+  return path.join(PROJECT_WORKSPACE_ROOT, assertSafeId(projectId, "project id"));
+}
+
 export function artifactWorkspaceDir(projectId: string, artifactSlug: string) {
-  return path.join(PROJECT_WORKSPACE_ROOT, projectId, artifactSlug);
+  return path.join(
+    projectWorkspaceDir(projectId),
+    assertSafeId(artifactSlug, "artifact slug"),
+  );
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -87,14 +117,10 @@ function getAbsolutePath(
     throw new Error("Invalid file path.");
   }
 
-  const artifactDir = path.join(
-    PROJECT_WORKSPACE_ROOT,
-    projectId,
-    artifactSlug,
-  );
+  const artifactDir = artifactWorkspaceDir(projectId, artifactSlug);
   const absolute = path.resolve(artifactDir, normalized);
 
-  if (!absolute.startsWith(path.resolve(artifactDir))) {
+  if (!isPathInside(artifactDir, absolute)) {
     throw new Error("Path escapes project workspace.");
   }
 

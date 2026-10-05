@@ -193,11 +193,35 @@ export function AuthModal() {
     });
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(
-      'Email sign-in is not configured yet. Please use Google or GitHub.',
-    );
+
+    // Local-only email/password path (server must also set ENABLE_DEV_EMAIL_AUTH).
+    if (process.env.NEXT_PUBLIC_ENABLE_DEV_EMAIL_AUTH !== '1') {
+      setError(
+        'Email sign-in is not configured yet. Please use Google or GitHub.',
+      );
+      return;
+    }
+
+    setError(null);
+    setIsLoading(true);
+    const result =
+      mode === 'register'
+        ? await authClient.signUp.email({
+            name: name.trim() || email.split('@')[0],
+            email,
+            password,
+          })
+        : await authClient.signIn.email({ email, password });
+
+    if (result.error) {
+      setIsLoading(false);
+      setError(result.error.message ?? 'Sign-in failed. Please try again.');
+      return;
+    }
+
+    window.location.assign(getCallbackUrl());
   }
 
   if (!isOpen) return null;

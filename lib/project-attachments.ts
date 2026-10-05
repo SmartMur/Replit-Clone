@@ -2,8 +2,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { formatFileSize } from './app-utils';
 import {
+  artifactWorkspaceDir,
   buildDbPath,
   getMimeType,
+  isPathInside,
   listProjectFiles,
   normalizeRelativePath,
 } from './project-files';
@@ -49,7 +51,7 @@ export type StoredPromptAttachment = {
 };
 
 function getWorkspaceDir(projectId: string, artifactSlug: string) {
-  return path.join(process.cwd(), "public", "project-workspace", projectId, artifactSlug);
+  return artifactWorkspaceDir(projectId, artifactSlug);
 }
 
 function getAbsoluteAttachmentPath(
@@ -61,7 +63,7 @@ function getAbsoluteAttachmentPath(
   const artifactDir = getWorkspaceDir(projectId, artifactSlug);
   const absolute = path.resolve(artifactDir, normalized);
 
-  if (!absolute.startsWith(path.resolve(artifactDir))) {
+  if (!isPathInside(artifactDir, absolute)) {
     throw new Error("Path escapes project workspace.");
   }
 
