@@ -1,9 +1,12 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 
-import type Anthropic from '@anthropic-ai/sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
-import { getAnthropicClient } from '@/lib/anthropic';
+import {
+  BUILDER_TOOL_PREFIX,
+  createBuilderServer,
+} from '@/lib/agent/mcp-tools';
 import { applyFileEdit } from '@/lib/agent/apply-file-edit';
 import { buildArtifactContextSnapshot } from '@/lib/agent/build-artifact-context';
 import { getArtifactForProject } from '@/lib/agent/access';
@@ -17,7 +20,6 @@ import type { AgentLimits } from '@/lib/billing/entitlements';
 import {
   buildAgentSystemPrompt,
   detectProjectStackFromPaths,
-  getAgentTools,
   isPlanModeMessage,
   PLAN_MODE_ENABLED_MARKER,
 } from '@/lib/agent/prompts';
@@ -52,6 +54,9 @@ import {
 } from '@/lib/preview/detect-preview-mode';
 import { formatBundleError } from '@/lib/preview/format-bundle-error';
 import { artifactWorkspaceDir } from '@/lib/project-files';
+import { mkdir } from 'node:fs/promises';
+import { readSkill } from '@/lib/agent/skills';
+import { DESIGN_SYSTEM_CSS, renderDesignSystemCss } from '@/lib/agent/skills-adapter';
 import {
   listProjectFiles,
   readProjectFile,
@@ -111,6 +116,7 @@ type RunAgentLoopOptions = {
   projectId: string;
   artifactId: string;
   limits?: AgentLimits;
+  signal?: AbortSignal;
   onEvent?: (event: AgentStreamEvent) => void;
 };
 
@@ -120,7 +126,9 @@ type ToolContext = {
   artifactId: string;
   artifactSlug: string;
   artifactName: string;
+  artifactType: string;
   planMode: boolean;
+  skillsRead: Set<string>;
   existingPaths: Set<string>;
   readPaths: Set<string>;
   writtenPaths: Set<string>;
@@ -241,6 +249,29 @@ function normalizePlanOptions(raw: unknown): string[] {
     .slice(0, 4);
 }
 
+/**
+ * Deterministic enforcement of the design engine: a site seeded with design-system.css
+ * must have read the skill and must actually use the stylesheet.
+ */
+async function checkDesignSystemGate(ctx: ToolContext) {
+  const css = await readProjectFile(ctx.projectId, ctx.artifactSlug, DESIGN_SYSTEM_CSS);
+  if (css === null) return null;
+
+  const readSkillMd = [...ctx.skillsRead].some((entry) =>
+    entry.startsWith('bm-design-system/SKILL.md'),
+  );
+  if (!readSkillMd) {
+    return 'This site uses the bm-design-system engine. Call read_skill with skill "bm-design-system" and path "SKILL.md" (and references/agent-instructions.md), then restyle using its tokens and component classes before completing.';
+  }
+
+  const html = await readProjectFile(ctx.projectId, ctx.artifactSlug, 'index.html');
+  if (html === null) return null;
+  if (!/<link\b[^>]*href=["']design-system\.css["']/i.test(html)) {
+    return `index.html must include <link rel="stylesheet" href="${DESIGN_SYSTEM_CSS}"> in <head> (the server turns it into the Tailwind runtime). Add it, use the design-system tokens and classes, and remove duplicate hand-rolled styling.`;
+  }
+  return null;
+}
+
 async function executeTool(
   name: string,
   input: Record<string, unknown>,
@@ -295,6 +326,18 @@ async function executeTool(
           .map((file) => file.path.replace(`${ctx.artifactSlug}/`, ''))
           .join('\n'),
       };
+    }
+
+    case 'read_skill': {
+      const skill = String(input.skill ?? '').trim();
+      const skillPath = String(input.path ?? '').trim();
+      ctx.skillsRead.add(`${skill}/${skillPath}`);
+      emitAction(
+        ctx,
+        'Read design skill',
+        skillPath ? `${skill}/${skillPath}` : skill,
+      );
+      return { result: await readSkill(skill, skillPath || undefined) };
     }
 
     case 'read_file': {
@@ -484,6 +527,12 @@ async function executeTool(
         };
       }
 
+      const designGate = await checkDesignSystemGate(ctx);
+      if (designGate) {
+        ctx.buildValid = false;
+        return { result: `${BUILD_NOT_READY_PREFIX} ${designGate}` };
+      }
+
       const summary = String(input.summary ?? '').trim();
       emitAction(ctx, 'Validating preview');
 
@@ -508,80 +557,269 @@ async function executeTool(
   }
 }
 
-async function streamAssistantTurn(
-  client: Anthropic,
-  systemPrompt: string,
-  chatMessages: Anthropic.MessageParam[],
-  tools: Anthropic.Tool[],
-  ctx: ToolContext,
-  limits: AgentLimits,
-) {
-  const stream = client.messages.stream({
-    model: limits.model,
-    max_tokens: limits.maxTokens,
-    system: systemPrompt,
-    tools,
-    messages: chatMessages,
+type ImageInput = {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  data: string;
+};
+
+/** Minimal async queue so we can feed follow-up user messages into one running query. */
+function createInputQueue() {
+  const pending: SDKUserMessage[] = [];
+  let wake: (() => void) | null = null;
+  let closed = false;
+
+  async function* iterate(): AsyncGenerator<SDKUserMessage> {
+    while (true) {
+      if (pending.length > 0) {
+        yield pending.shift()!;
+        continue;
+      }
+      if (closed) return;
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+    }
+  }
+
+  return {
+    iterable: iterate(),
+    push(message: SDKUserMessage) {
+      pending.push(message);
+      wake?.();
+    },
+    close() {
+      closed = true;
+      wake?.();
+    },
+  };
+}
+
+function userMessage(text: string, images: ImageInput[] = []): SDKUserMessage {
+  return {
+    type: 'user',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content:
+        images.length === 0
+          ? text
+          : [
+              ...images.map((image) => ({
+                type: 'image' as const,
+                source: {
+                  type: 'base64' as const,
+                  media_type: image.mediaType,
+                  data: image.data,
+                },
+              })),
+              { type: 'text' as const, text },
+            ],
+    },
+  };
+}
+
+/** Environment for the CLI child: only what it needs to find its login. No app secrets, no API key. */
+function childEnv(): Record<string, string | undefined> {
+  const keep = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'XDG_CONFIG_HOME'];
+  const env: Record<string, string | undefined> = {};
+  for (const key of keep) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  return env;
+}
+
+type SessionOutcome = {
+  restartAfterPlan: boolean;
+  finalText: string;
+  hitTurnLimit: boolean;
+};
+
+/** New static website artifacts start with the bm-design-system stylesheet so the agent builds on tokens. */
+async function seedDesignSystem(ctx: ToolContext) {
+  if (ctx.planMode || ctx.artifactType !== 'WEB_APP') return;
+  const files = await listProjectFiles(ctx.projectId, ctx.artifactSlug);
+  const prefix = `${ctx.artifactSlug}/`;
+  const buildable = files.filter(
+    (file) => !file.path.startsWith(`${prefix}${PROMPT_ATTACHMENTS_DIR}/`),
+  );
+  if (buildable.length > 0) return;
+
+  await writeProjectFile({
+    projectId: ctx.projectId,
+    artifactSlug: ctx.artifactSlug,
+    artifactId: ctx.artifactId,
+    relativePath: DESIGN_SYSTEM_CSS,
+    content: await renderDesignSystemCss(),
+  });
+  ctx.existingPaths.add(DESIGN_SYSTEM_CSS);
+  ctx.onEvent?.({ type: 'action', label: 'Applied design system', path: DESIGN_SYSTEM_CSS, status: 'done' });
+}
+
+async function runSession({
+  ctx,
+  systemPrompt,
+  firstMessage,
+  limits,
+  signal,
+}: {
+  ctx: ToolContext;
+  systemPrompt: string;
+  firstMessage: SDKUserMessage;
+  limits: AgentLimits;
+  signal?: AbortSignal;
+}): Promise<SessionOutcome & { summary: string }> {
+  const workspaceDir = artifactWorkspaceDir(ctx.projectId, ctx.artifactSlug);
+  await mkdir(workspaceDir, { recursive: true });
+  await seedDesignSystem(ctx);
+
+  let summary = '';
+  let done = false;
+  let restartAfterPlan = false;
+
+  const { server, allowedTools } = createBuilderServer(
+    ctx.planMode,
+    async (name, args) => {
+      const { result, stopForQuestion } = await executeTool(name, args, ctx);
+
+      if (name === 'complete_plan' && ctx.planCompleted) {
+        restartAfterPlan = true;
+      }
+      if (name === 'ask_plan_question' && stopForQuestion) {
+        summary = ctx.planQuestion?.question ?? result;
+        done = true;
+      }
+      if (name === 'complete_build' && !result.startsWith(BUILD_NOT_READY_PREFIX)) {
+        summary = result;
+        done = true;
+      }
+      return result;
+    },
+  );
+
+  const inputQueue = createInputQueue();
+  inputQueue.push(firstMessage);
+
+  const abort = new AbortController();
+  const onExternalAbort = () => abort.abort();
+  signal?.addEventListener('abort', onExternalAbort);
+  if (signal?.aborted) abort.abort();
+
+  const stream = query({
+    prompt: inputQueue.iterable,
+    options: {
+      abortController: abort,
+      cwd: workspaceDir,
+      model: limits.model,
+      maxTurns: limits.maxTurns,
+      systemPrompt,
+      // Lockdown: no built-in tools (no Bash/Read/Write/Web), no user settings,
+      // hooks, plugins or extra MCP servers. Only the builder tools below exist.
+      tools: [],
+      mcpServers: { builder: server },
+      allowedTools,
+      strictMcpConfig: true,
+      settingSources: [],
+      plugins: [],
+      permissionMode: 'dontAsk',
+      persistSession: false,
+      includePartialMessages: true,
+      env: childEnv(),
+      extraArgs: { 'disable-slash-commands': null },
+      ...(process.env.CLAUDE_CODE_PATH
+        ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_PATH }
+        : {}),
+    },
   });
 
   const toolBlocks = new Map<number, StreamingToolBlock>();
   let textSnapshot = '';
+  let lastText = '';
+  let nudges = 0;
+  let hitTurnLimit = false;
 
-  stream.on('streamEvent', (event) => {
-    if (
-      event.type === 'content_block_start' &&
-      event.content_block.type === 'tool_use'
-    ) {
-      toolBlocks.set(event.index, {
-        id: event.content_block.id,
-        name: event.content_block.name,
-        json: '',
-      });
-    }
+  try {
+    for await (const message of stream) {
+      // A terminal tool already fired: stop as soon as the model moves on.
+      if (done || restartAfterPlan) break;
 
-    if (event.type === 'content_block_delta') {
-      if (event.delta.type === 'input_json_delta') {
-        const block = toolBlocks.get(event.index);
-        if (!block) return;
-        block.json += event.delta.partial_json;
-        handleStreamingToolDelta(ctx, block);
+      if (message.type === 'stream_event') {
+        const event = message.event;
+
+        if (event.type === 'message_start') {
+          textSnapshot = '';
+          toolBlocks.clear();
+        }
+
+        if (
+          event.type === 'content_block_start' &&
+          event.content_block.type === 'tool_use'
+        ) {
+          toolBlocks.set(event.index, {
+            id: event.content_block.id,
+            name: event.content_block.name.replace(BUILDER_TOOL_PREFIX, ''),
+            json: '',
+          });
+        }
+
+        if (event.type === 'content_block_delta') {
+          if (event.delta.type === 'input_json_delta') {
+            const block = toolBlocks.get(event.index);
+            if (block) {
+              block.json += event.delta.partial_json;
+              handleStreamingToolDelta(ctx, block);
+            }
+          }
+          if (event.delta.type === 'text_delta') {
+            textSnapshot += event.delta.text;
+            lastText = textSnapshot;
+            ctx.onEvent?.({ type: 'text_delta', content: textSnapshot });
+          }
+        }
+        continue;
       }
 
-      if (event.delta.type === 'text_delta') {
-        textSnapshot += event.delta.text;
-        ctx.onEvent?.({ type: 'text_delta', content: textSnapshot });
+      if (message.type === 'result') {
+        if (message.subtype === 'error_max_turns') {
+          hitTurnLimit = true;
+          break;
+        }
+        if (message.subtype !== 'success') {
+          throw new Error('The agent stopped unexpectedly. Try again.');
+        }
+
+        const text = (message.result || lastText).trim();
+        const buildInProgress =
+          !ctx.buildValid &&
+          !ctx.planQuestion &&
+          (ctx.writtenPaths.size > 0 ||
+            ctx.fileWrites.length > 0 ||
+            ctx.planCompleted);
+
+        if (buildInProgress && nudges < MAX_AGENT_CONTINUE_NUDGES) {
+          nudges += 1;
+          if (text) ctx.onEvent?.({ type: 'text_delta', content: text });
+          inputQueue.push(
+            userMessage(
+              'The build is not finished yet. Continue implementing the remaining files, then call complete_build when the preview is ready.',
+            ),
+          );
+          continue;
+        }
+
+        summary = summary || text || 'Done.';
+        break;
       }
     }
-  });
-
-  return stream.finalMessage();
-}
-
-function buildUserMessageParam(
-  text: string,
-  images: Array<{
-    mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-    data: string;
-  }>,
-): Anthropic.MessageParam {
-  if (images.length === 0) {
-    return { role: 'user', content: text };
+  } catch (error) {
+    // After a terminal tool we abort the child ourselves; anything else is a real failure.
+    if (!(done || restartAfterPlan)) throw error;
+  } finally {
+    inputQueue.close();
+    abort.abort();
+    signal?.removeEventListener('abort', onExternalAbort);
   }
 
-  return {
-    role: 'user',
-    content: [
-      ...images.map((image) => ({
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: image.mediaType,
-          data: image.data,
-        },
-      })),
-      { type: 'text' as const, text },
-    ],
-  };
+  return { restartAfterPlan, finalText: lastText, hitTurnLimit, summary };
 }
 
 export async function runAgentLoop({
@@ -589,12 +827,9 @@ export async function runAgentLoop({
   projectId,
   artifactId,
   limits,
+  signal,
   onEvent,
 }: RunAgentLoopOptions): Promise<AgentRunResult> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('Anthropic API key is not configured.');
-  }
-
   const agentLimits: AgentLimits = limits ?? {
     maxTurns: MAX_AGENT_TURNS,
     maxTokens: ANTHROPIC_MAX_TOKENS,
@@ -677,38 +912,15 @@ export async function runAgentLoop({
     projectStack: detectProjectStackFromPaths(relativePaths, indexHtml),
   };
 
-  let systemPrompt = buildAgentSystemPrompt({
-    ...promptContext,
-    planMode,
-    attachmentContext: attachmentContext.summary || undefined,
-    hasExistingFiles,
-  });
-
-  const chatMessages: Anthropic.MessageParam[] = [];
-  let injectedVision = false;
-
-  for (const message of messages) {
-    if (message.role === 'SYSTEM') continue;
-
-    if (
-      message.role === 'USER' &&
-      !injectedVision &&
-      attachmentContext.images.length > 0
-    ) {
-      chatMessages.push(
-        buildUserMessageParam(message.content, attachmentContext.images),
-      );
-      injectedVision = true;
-      continue;
-    }
-
-    chatMessages.push({
-      role: message.role === 'USER' ? 'user' : 'assistant',
-      content: message.content,
-    });
-  }
-
-  const existingPaths = new Set(relativePaths);
+  // Each CLI session is stateless: the prior conversation is replayed as one transcript.
+  const transcript = messages
+    .filter((message) => message.role !== 'SYSTEM')
+    .map(
+      (message) =>
+        `[${message.role === 'USER' ? 'user' : 'assistant'}]\n${message.content}`,
+    )
+    .join('\n\n');
+  const transcriptPrompt = `Conversation so far (oldest first). Respond to the latest [user] message by using your tools.\n\n${transcript}`;
 
   const ctx: ToolContext = {
     conversationId,
@@ -716,8 +928,10 @@ export async function runAgentLoop({
     artifactId,
     artifactSlug: artifact.slug,
     artifactName: artifact.name,
+    artifactType: artifact.type,
     planMode,
-    existingPaths,
+    skillsRead: new Set(),
+    existingPaths: new Set(relativePaths),
     readPaths: new Set(),
     writtenPaths: new Set(),
     readCache: new Map(),
@@ -731,144 +945,39 @@ export async function runAgentLoop({
 
   onEvent?.({ type: 'status', phase: 'working', actionCount: 0 });
 
-  const client = getAnthropicClient();
-  let summary = '';
-  let turn = 0;
-  let continueNudges = 0;
-  let hitTurnLimit = false;
+  const buildPrompt = (inPlanMode: boolean) =>
+    buildAgentSystemPrompt({
+      ...promptContext,
+      planMode: inPlanMode,
+      attachmentContext: attachmentContext.summary || undefined,
+      hasExistingFiles,
+    });
 
-  while (turn < agentLimits.maxTurns) {
-    turn += 1;
+  let outcome = await runSession({
+    ctx,
+    systemPrompt: buildPrompt(ctx.planMode),
+    firstMessage: userMessage(transcriptPrompt, attachmentContext.images),
+    limits: agentLimits,
+    signal,
+  });
 
-    const response = await streamAssistantTurn(
-      client,
-      systemPrompt,
-      chatMessages,
-      getAgentTools(ctx.planMode),
+  // complete_plan switches the system prompt and tool set, so continue in a fresh session.
+  if (outcome.restartAfterPlan) {
+    outcome = await runSession({
       ctx,
-      agentLimits,
-    );
-    chatMessages.push({ role: 'assistant', content: response.content });
-
-    const toolUses = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
-    );
-
-    if (toolUses.length === 0) {
-      const textBlock = response.content.find((block) => block.type === 'text');
-      const text = textBlock?.type === 'text' ? textBlock.text.trim() : '';
-
-      const buildInProgress =
-        !ctx.buildValid &&
-        !ctx.planQuestion &&
-        (ctx.writtenPaths.size > 0 ||
-          ctx.fileWrites.length > 0 ||
-          ctx.planCompleted);
-
-      if (
-        buildInProgress &&
-        continueNudges < MAX_AGENT_CONTINUE_NUDGES &&
-        turn < agentLimits.maxTurns
-      ) {
-        continueNudges += 1;
-        if (text) {
-          ctx.onEvent?.({ type: 'text_delta', content: text });
-        }
-        chatMessages.push({
-          role: 'user',
-          content:
-            'The build is not finished yet. Continue implementing the remaining files, then call complete_build when the preview is ready.',
-        });
-        continue;
-      }
-
-      summary = text || 'Done.';
-      break;
-    }
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    let stopForQuestion = false;
-
-    for (const toolUse of toolUses) {
-      const input = (toolUse.input ?? {}) as Record<string, unknown>;
-      const { result, stopForQuestion: shouldStop } = await executeTool(
-        toolUse.name,
-        input,
-        ctx,
-      );
-
-      if (toolUse.name === 'complete_plan') {
-        systemPrompt = buildAgentSystemPrompt({
-          ...promptContext,
-          planMode: false,
-          attachmentContext: attachmentContext.summary || undefined,
-          hasExistingFiles,
-        });
-      }
-
-      if (toolUse.name === 'ask_plan_question' && shouldStop) {
-        summary = ctx.planQuestion?.question ?? result;
-        stopForQuestion = true;
-      }
-
-      if (
-        toolUse.name === 'complete_build' &&
-        !result.startsWith(BUILD_NOT_READY_PREFIX)
-      ) {
-        summary = result;
-      }
-
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: result,
-      });
-    }
-
-    if (stopForQuestion) {
-      break;
-    }
-
-    chatMessages.push({ role: 'user', content: toolResults });
-
-    if (summary) {
-      break;
-    }
-
-    if (response.stop_reason !== 'tool_use' && !summary) {
-      const textBlock = response.content.find((block) => block.type === 'text');
-      if (textBlock?.type === 'text' && textBlock.text.trim()) {
-        const text = textBlock.text.trim();
-        const buildInProgress =
-          !ctx.buildValid &&
-          !ctx.planQuestion &&
-          (ctx.writtenPaths.size > 0 ||
-            ctx.fileWrites.length > 0 ||
-            ctx.planCompleted);
-
-        if (
-          buildInProgress &&
-          continueNudges < MAX_AGENT_CONTINUE_NUDGES &&
-          turn < agentLimits.maxTurns
-        ) {
-          continueNudges += 1;
-          ctx.onEvent?.({ type: 'text_delta', content: text });
-          chatMessages.push({
-            role: 'user',
-            content:
-              'Keep going — finish the remaining work and call complete_build when done.',
-          });
-          continue;
-        }
-
-        summary = text;
-        break;
-      }
-    }
+      systemPrompt: buildPrompt(false),
+      firstMessage: userMessage(
+        `${transcriptPrompt}\n\n[system]\nThe plan was approved. Begin building immediately according to it, then call complete_build.`,
+        attachmentContext.images,
+      ),
+      limits: agentLimits,
+      signal,
+    });
   }
 
-  hitTurnLimit =
-    turn >= agentLimits.maxTurns && !ctx.buildValid && !ctx.planQuestion;
+  let summary = outcome.summary;
+  const hitTurnLimit =
+    outcome.hitTurnLimit && !ctx.buildValid && !ctx.planQuestion;
 
   if (!summary && ctx.planQuestion) {
     summary = ctx.planQuestion.question;

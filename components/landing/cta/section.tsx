@@ -9,7 +9,7 @@ export function CtaSection() {
           What are you waiting for?
         </h2>
         <Button
-          href="/signup"
+          href="/?auth=register"
           size="lg"
           className="h-20 w-full max-w-cta-button font-display text-2xl font-normal">
           Get started free

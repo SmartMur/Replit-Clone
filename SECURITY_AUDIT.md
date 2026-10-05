@@ -26,7 +26,22 @@ reproduced against a running instance before fixing.
 
 ## Residual risks (not fixed)
 - **R1: previews run on the app origin.** Generated HTML/JS is served from `/api/projects/.../preview/...` with the user's session cookie. Script in a generated site can call the app's own endpoints as the logged-in user. Acceptable for single-user localhost where you wrote the prompts; **not acceptable for multi-user or public hosting.** Proper fix is a separate preview origin (for example `*.preview.example.com`) or sandboxed iframes plus signed URLs. Do not expose this instance publicly until that is done.
+- **R1b: the editor preview iframe uses `sandbox="allow-scripts allow-same-origin"`** (`components/app/editor/artifact-preview.tsx:288`). With same-origin allowed, generated JS is not isolated from the app. Same fix as R1.
 - **R2: 9 high `npm audit` findings remain**, all in Prisma's CLI toolchain (`prisma` → `@prisma/dev` → `mysql2`, `deepmerge-ts`, `@prisma/config`). They are not loaded by the running app (it uses the `pg` adapter). npm's suggested "fix" is a downgrade to Prisma 6 and was not applied.
 - **R3: previews load React from esm.sh** (CDN import map) in the browser. Pin versions or self-host before relying on this.
 - **R4: no rate limiting** on the agent endpoint beyond per-plan turn limits; the Anthropic key bills per call.
 - **R5: avatar MIME check trusts the client-declared type** (content not sniffed). Low impact because the extension fixes the served type.
+
+## Agent backend change (feat/subscription-agent)
+The agent now uses the Claude Agent SDK on the owner's subscription login. Verified: the CLI exposes exactly one tool
+family (`mcp__builder__*`), no slash commands, child env contains only PATH/HOME/LANG-type vars, a second concurrent run
+on a project returns 409, and a full plan-then-build flow produces files, database rows and a working preview.
+Residual: prompt injection in attachments can still make the agent write arbitrary files inside the artifact folder (see R1).
+
+## bm-skills design engine (feat/bm-skills)
+Third-party instruction content (vendor/bm-skills, pinned d42872f, 64 files, sha256 manifest, `node scripts/verify-bm-skills.mjs`).
+- Exposure: the text becomes agent instructions. The agent has file tools only and the skill reader is read-only, restricted to .md/.css/.html/.txt inside three skill folders (traversal, absolute paths, .tsx and unvendored skills refused; unit-tested).
+- Not vendored: `.agents/setup` and `.agents/resume` (sudo, curl|sh, Postgres config changes), the plugin manifests, bm-skill-builder.
+- Tailwind v4 browser runtime is served from our own origin (`@tailwindcss/browser@4.3.3`, MIT), not a CDN.
+- Generated sites load Inter and DM Sans from Google Fonts (the design system default). This is an external request from every generated site; switch to self-hosted fonts if that matters.
+- Licence: upstream has no LICENSE file (README says free to use, fork, adapt). Confirm before publishing this repo publicly with the vendored copy.

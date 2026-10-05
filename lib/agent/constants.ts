@@ -16,7 +16,7 @@ export const MAX_AGENT_CONTINUE_NUDGES = readIntEnv(
   5,
 );
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'sonnet';
 
 function readIntEnv(value: string | undefined, fallback: number) {
   if (!value?.trim()) return fallback;

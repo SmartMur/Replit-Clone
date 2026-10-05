@@ -17,6 +17,54 @@ import {
   stripPreviewBaseHref,
 } from '@/lib/project-files';
 
+const DESIGN_SYSTEM_LINK =
+  /<link\b[^>]*href=["']design-system\.css["'][^>]*>/i;
+const TAILWIND_RUNTIME_PATH = '.runtime/tailwind.js';
+let tailwindRuntimeCache: string | null = null;
+
+async function readTailwindRuntime() {
+  if (!tailwindRuntimeCache) {
+    const resolved = path.join(
+      process.cwd(),
+      'node_modules',
+      '@tailwindcss',
+      'browser',
+      'dist',
+      'index.global.js',
+    );
+    tailwindRuntimeCache = await readFile(resolved, 'utf8');
+  }
+  return tailwindRuntimeCache;
+}
+
+/**
+ * bm-design-system output is Tailwind v4 CSS (@theme, @apply). The browser build of Tailwind
+ * only reads inline <style type="text/tailwindcss">, so swap the stylesheet link for the
+ * runtime plus the CSS inlined. The runtime comes from our own origin, not a CDN.
+ */
+async function applyDesignSystem(
+  html: string,
+  workspaceRoot: string,
+  inlineRuntime: boolean,
+) {
+  if (!DESIGN_SYSTEM_LINK.test(html)) return html;
+  let css: string;
+  try {
+    css = await readFile(path.join(workspaceRoot, 'design-system.css'), 'utf8');
+  } catch {
+    return html;
+  }
+  const runtime = inlineRuntime
+    ? `<script>${(await readTailwindRuntime()).replace(/<\/script/gi, '<\\/script')}</script>`
+    : `<script src="${TAILWIND_RUNTIME_PATH}"></script>`;
+  // The browser runtime defines no utilities unless the stylesheet imports Tailwind itself.
+  const source = /@import\s+["']tailwindcss["']/.test(css)
+    ? css
+    : `@import "tailwindcss";\n${css}`;
+  const style = `<style type="text/tailwindcss">\n${source.replace(/<\/style/gi, '<\\/style')}\n</style>`;
+  return html.replace(DESIGN_SYSTEM_LINK, () => `${runtime}\n${style}`);
+}
+
 export async function serveArtifactIndex(
   projectId: string,
   artifactSlug: string,
@@ -69,7 +117,15 @@ export async function serveArtifactIndex(
   }
 
   const content = await readFile(absolute, 'utf8');
-  const html = injectPreviewBaseHref(content, projectId, artifactSlug);
+  const html = injectPreviewBaseHref(
+    await applyDesignSystem(
+      content,
+      artifactWorkspaceDir(projectId, artifactSlug),
+      false,
+    ),
+    projectId,
+    artifactSlug,
+  );
   return {
     body: html,
     contentType: getMimeType('index.html'),
@@ -107,6 +163,13 @@ export async function serveArtifactFile(
     }
   }
 
+  if (relativePath === TAILWIND_RUNTIME_PATH) {
+    return {
+      body: await readTailwindRuntime(),
+      contentType: 'text/javascript; charset=utf-8',
+    };
+  }
+
   const workspaceRoot = artifactWorkspaceDir(projectId, artifactSlug);
   const absolute = path.resolve(workspaceRoot, relativePath);
 
@@ -123,7 +186,11 @@ export async function serveArtifactFile(
   const mimeType = getMimeType(relativePath);
 
   if (mimeType.startsWith('text/html')) {
-    const rawHtml = content.toString('utf8');
+    const rawHtml = await applyDesignSystem(
+      content.toString('utf8'),
+      workspaceRoot,
+      Boolean(options?.forDownload),
+    );
     return {
       body: options?.forDownload
         ? stripPreviewBaseHref(rawHtml)
