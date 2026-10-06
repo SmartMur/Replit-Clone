@@ -11,6 +11,7 @@ const SHAPES: Record<string, z.ZodRawShape> = {
   list_files: {},
   use_template: { template: z.string().optional() },
   check_preview: { look_at: z.string().optional() },
+  generate_image: { slot: z.string(), description: z.string(), replace: z.boolean().optional() },
   read_skill: { skill: z.string(), path: z.string().optional() },
   read_file: { path: z.string().describe('Relative file path, e.g. index.html') },
   edit_file: {

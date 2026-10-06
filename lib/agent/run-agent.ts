@@ -68,12 +68,16 @@ import { createSnapshot } from '@/lib/projects/snapshots';
 import { auditSite } from '@/lib/agent/site-audit';
 import { DESIGN_SYSTEM_CSS, SITE_CSS_STUB } from '@/lib/agent/skills-adapter';
 import { SITE_CSS } from '@/lib/preview/design-css';
+import { codexAvailable, generateImage, sanitizeDescription } from '@/lib/images/generate';
+import { ImageError, toThumbnailJpeg } from '@/lib/images/process';
+import { SLOT_NAME } from '@/lib/images/slots';
 import { renderCheck, type RenderReport } from '@/lib/preview/render-check';
 import { serveArtifactFile, serveArtifactIndex } from '@/lib/preview/serve-preview';
 import { listWorkspaceRelativePaths } from '@/lib/preview/list-workspace-paths';
 import {
   listProjectFiles,
   readProjectFile,
+  writeProjectBinaryFile,
   writeProjectFile,
 } from '@/lib/project-files';
 import { prisma } from '@/lib/prisma';
@@ -149,6 +153,7 @@ type ToolContext = {
   checkCalls: number;
   lastCheckErrors: number;
   renderUnavailable: boolean;
+  imageCalls: number;
   existingPaths: Set<string>;
   readPaths: Set<string>;
   writtenPaths: Set<string>;
@@ -425,6 +430,56 @@ async function executeTool(
           .map((file) => file.path.replace(`${ctx.artifactSlug}/`, ''))
           .join('\n'),
       };
+    }
+
+    case 'generate_image': {
+      if (ctx.planMode) {
+        return { result: 'Plan mode is still active. Name the images you want in the plan, call complete_plan, then generate them.' };
+      }
+      const slot = String(input.slot ?? '').trim().toLowerCase();
+      const description = sanitizeDescription(String(input.description ?? ''));
+      if (!SLOT_NAME.test(slot)) {
+        return { result: 'slot must be lowercase letters, digits and hyphens (for example "hero"), without a file extension.' };
+      }
+      if (description.length < 10) {
+        return { result: 'Describe the image in at least a few words: subject, setting, light and mood.' };
+      }
+      const relativePath = `images/${slot}.jpg`;
+      if (ctx.existingPaths.has(relativePath) && input.replace !== true) {
+        return {
+          result: `${relativePath} already exists (the owner may have uploaded it). Use it, pick a different slot name, or pass replace: true only if the owner asked you to replace it.`,
+        };
+      }
+      ctx.imageCalls += 1;
+      if (ctx.imageCalls > 6) {
+        return { result: 'You have already generated 6 images in this request. Use the ones you have, or ask the owner to upload more.' };
+      }
+      if (!(await codexAvailable())) {
+        return { result: 'Image generation is not available on this server. Use inline SVG, or leave a clearly named slot (images/<name>.jpg) and tell the owner which photos to upload in the Images panel.' };
+      }
+      emitAction(ctx, `Generating image: ${slot}`);
+      try {
+        const generated = await generateImage(description);
+        await writeProjectBinaryFile({
+          projectId: ctx.projectId,
+          artifactSlug: ctx.artifactSlug,
+          artifactId: ctx.artifactId,
+          relativePath,
+          content: generated.buffer,
+          mimeType: 'image/jpeg',
+        });
+        ctx.existingPaths.add(relativePath);
+        ctx.previewVersion += 1;
+        ctx.writeCount += 1;
+        emitAction(ctx, `Saved ${relativePath}`, `${ctx.artifactSlug}/${relativePath}`);
+        const thumb = await toThumbnailJpeg(generated.buffer);
+        return {
+          result: `Saved ${relativePath} (${generated.width}x${generated.height}, ${Math.round(generated.buffer.length / 1024)} KB). Use it as <img src="${relativePath}" alt="..." width="${generated.width}" height="${generated.height}" loading="lazy" decoding="async"> (hero image: no loading attribute, add fetchpriority="high"). Look at the thumbnail: if it does not match what you described, generate it again with a better description. Write a plain, descriptive alt text; do not call these people real clients or staff.`,
+          images: [{ data: thumb.toString('base64'), mimeType: 'image/jpeg' }],
+        };
+      } catch (error) {
+        return { result: `Image generation failed: ${error instanceof ImageError ? error.message : 'unknown error'}. Continue without it: use inline SVG or a clearly named empty slot and tell the owner.` };
+      }
     }
 
     case 'check_preview': {
@@ -1134,6 +1189,7 @@ export async function runAgentLoop({
     checkCalls: 0,
     lastCheckErrors: 0,
     renderUnavailable: false,
+    imageCalls: 0,
     existingPaths: new Set(relativePaths),
     readPaths: new Set(),
     writtenPaths: new Set(),

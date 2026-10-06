@@ -231,3 +231,42 @@ export async function writeProjectFile({
     updatedAt: file.updatedAt.toISOString(),
   };
 }
+
+/** Write a binary file (images) into an artifact workspace and record it. Same containment rules as text files. */
+export async function writeProjectBinaryFile({
+  projectId,
+  artifactSlug,
+  artifactId,
+  relativePath,
+  content,
+  mimeType,
+}: {
+  projectId: string;
+  artifactSlug: string;
+  artifactId?: string | null;
+  relativePath: string;
+  content: Buffer;
+  mimeType: string;
+}) {
+  const normalized = normalizeRelativePath(relativePath);
+  if (!normalized) {
+    throw new Error("Invalid file path.");
+  }
+  const dbPath = buildDbPath(artifactSlug, normalized);
+  const absolute = getAbsolutePath(projectId, artifactSlug, normalized);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  await writeFile(absolute, content);
+
+  const data = {
+    artifactId: artifactId ?? null,
+    storageKey: `workspace/${projectId}/${artifactSlug}/${normalized}`,
+    mimeType,
+    sizeBytes: content.length,
+  };
+  await prisma.projectFile.upsert({
+    where: { projectId_path: { projectId, path: dbPath } },
+    create: { projectId, path: dbPath, ...data },
+    update: data,
+  });
+  return { path: dbPath, relativePath: normalized, bytes: content.length };
+}

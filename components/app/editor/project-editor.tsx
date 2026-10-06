@@ -145,6 +145,7 @@ export function ProjectEditor({ project, appTier }: ProjectEditorProps) {
           project={editorProject}
           previewVersion={previewVersion}
           agentActivity={agentActivity}
+          onImagesChanged={() => handlePreviewVersionChange(1)}
           open={libraryOpen}
           onToggle={() => setLibraryOpen((value) => !value)}
         />
