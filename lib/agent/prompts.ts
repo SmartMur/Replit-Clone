@@ -75,6 +75,21 @@ const CHECK_PREVIEW_TOOL = {
   },
 } satisfies Anthropic.Tool;
 
+const GENERATE_IMAGE_TOOL = {
+  name: 'generate_image',
+  description:
+    'Generate one photo or illustration for the site with AI (about a minute each, so use it for the few images that matter: hero, key sections). Saves images/<slot>.jpg and shows you a thumbnail. Never overwrites an existing image unless replace is true. Describe the subject, setting, light and mood; the image has no text or logos and never shows real, named people.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      slot: { type: 'string', description: 'File name without extension, lowercase letters, digits and hyphens, e.g. hero or team' },
+      description: { type: 'string', description: 'What the image shows (10 to 400 characters)' },
+      replace: { type: 'boolean', description: 'Only true if the owner asked you to replace an existing image' },
+    },
+    required: ['slot', 'description'],
+  },
+} satisfies Anthropic.Tool;
+
 const READ_ONLY_TOOLS = [
   READ_SKILL_TOOL,
   USE_TEMPLATE_TOOL,
@@ -269,6 +284,7 @@ export const AGENT_TOOLS = [
   READ_SKILL_TOOL,
   USE_TEMPLATE_TOOL,
   CHECK_PREVIEW_TOOL,
+  GENERATE_IMAGE_TOOL,
   {
     name: 'list_files',
     description: 'List all files in the active artifact workspace.',

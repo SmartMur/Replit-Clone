@@ -10,12 +10,14 @@ import { artifactTypeToCategoryId } from '@/lib/app-types';
 import type { AppProjectDetail } from '@/lib/app-types';
 import { cn } from '@/lib/utils';
 import { AgentActivityPulse } from './agent-activity-indicator';
+import { ImageSlotsPanel } from './image-slots-panel';
 import { LibraryProjectFiles } from './library-project-files';
 
 type LibrarySidebarProps = {
   project: AppProjectDetail;
   previewVersion: number;
   agentActivity: AgentActivity;
+  onImagesChanged: () => void;
   open: boolean;
   onToggle: () => void;
 };
@@ -24,6 +26,7 @@ export function LibrarySidebar({
   project,
   previewVersion,
   agentActivity,
+  onImagesChanged,
   open,
   onToggle,
 }: LibrarySidebarProps) {
@@ -95,6 +98,12 @@ export function LibrarySidebar({
               })}
             </ul>
           </section>
+
+          <ImageSlotsPanel
+            project={project}
+            previewVersion={previewVersion}
+            onChanged={onImagesChanged}
+          />
 
           <LibraryProjectFiles
             project={project}

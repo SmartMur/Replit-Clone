@@ -25,6 +25,10 @@ Evidence: 12 agent turns across three EstherCare builds (owner feedback verbatim
 - Tests: tests/render-check.test.ts (7), tests/snapshots.test.ts (5), tests/site-audit.test.ts (13).
 - Proven end to end: the agent found and fixed a real historical invisible-button bug on its own, and reported honestly what it did and did not see.
 
+## Session 3a (done on branch feat/session3a-images)
+- Images panel in the editor (thumbnails, missing badge, upload, generate) backed by safe server actions; `generate_image` agent tool using Codex image generation in a locked-down mode; binary file writer; image slot scanner; scripts/generate-images.mjs hardened the same way.
+- Proven end to end: the agent built a bakery site with 4 generated photos on its own and placed them correctly; UI upload, hostile uploads refused, Generate replaced a photo with a snapshot first.
+
 ## Next
-- Session 3a: image slots (named, with an upload panel and optional Codex image generation) so generated sites are not text-only; `apply_template` (restyle/replace with snapshot, restore button in the editor).
+- Session 3a-2: `apply_template` (restyle/replace with snapshot) and a Versions list with a Restore button in the editor.
 - Session 3b: `capture_reference(url)` with SSRF defences (https/443 only, resolve and refuse private ranges, pin IP, re-check redirects and subresources, size/time caps, untrusted-content wrapping).

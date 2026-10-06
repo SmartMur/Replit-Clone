@@ -46,7 +46,7 @@ or configure GitHub/Google OAuth credentials in `.env.local`.
 ## Viewing from another device on your LAN
 Set in `.env.local`: `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, `TRUSTED_ORIGINS` to `http://<lan-ip>:3000`,
 `NEXT_PUBLIC_ENABLE_DEV_EMAIL_AUTH=1`, and `ALLOWED_EMAILS=you@example.com` (only these can sign up; empty = nobody).
-Add the IP to `allowedDevOrigins` in `next.config.ts`, then `HOST=<lan-ip> scripts/dev.sh`.
+Set `ALLOWED_DEV_ORIGINS=<lan-ip>` in `.env.local`, then `HOST=<lan-ip> scripts/dev.sh`.
 The login modal's email form then works (Sign up, then Log in). Plain http on a trusted LAN only; see SECURITY_AUDIT.md R1.
 
 ## The AI agent runs on your Claude subscription (no API key)
@@ -55,3 +55,6 @@ The model gets only the in-app builder tools (list/read/edit/write file, plan an
 no web, no user settings or hooks, and a minimal environment with no app secrets. One run per project at a time,
 at most 2 runs at once (`MAX_CONCURRENT_AGENT_RUNS`), 10-minute timeout, aborted when the browser disconnects.
 Runs share your subscription's rate limits. Check Anthropic's current terms before relying on this beyond personal use.
+
+## Images
+The editor's Library has an Images panel: every `images/<name>.jpg` the site refers to, with Upload and Generate. Generation uses the Codex CLI signed in on the server (no API key); the in-app agent can also call it. Run `codex login` once. Uploads are re-encoded to JPEG and stripped of location data.
